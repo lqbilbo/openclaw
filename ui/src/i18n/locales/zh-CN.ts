@@ -151,7 +151,7 @@ export const zh_CN: TranslationMap = {
     },
   },
   login: {
-    subtitle: "网关仪表盘",
+    subtitle: "",
     passwordPlaceholder: "可选",
   },
   chat: {

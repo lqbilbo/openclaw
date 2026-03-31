@@ -144,3 +144,39 @@
   padding-left: 0;
   padding-right: 1em;
 }
+
+/* =============================================
+   OPENAGENT THEME - Text overrides
+   ============================================= */
+
+:root[data-theme="openagent"] .chat-text {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #3a3a35;
+}
+
+:root[data-theme="openagent"] .chat-text :where(p + p, p + ul, p + ol, p + pre, p + blockquote) {
+  margin-top: 1em;
+}
+
+:root[data-theme="openagent"] .chat-text :where(h1, h2, h3, h4) {
+  color: #1a1a18;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+:root[data-theme="openagent"] .chat-text :where(:not(pre) > code) {
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="openagent"] .chat-text :where(pre) {
+  background: #f0ede8;
+  border: 1px solid #d8d4cc;
+}
+
+:root[data-theme="openagent"] .chat-thinking {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.03);
+  color: #8a8880;
+}

@@ -306,7 +306,8 @@ export function applyResolvedTheme(host: SettingsHost, resolved: ResolvedTheme) 
     return;
   }
   const root = document.documentElement;
-  const themeMode = resolved.endsWith("light") ? "light" : "dark";
+  const lightThemes = new Set(["light", "openknot-light", "dash-light", "openagent"]);
+  const themeMode = lightThemes.has(resolved) ? "light" : "dark";
   root.dataset.theme = resolved;
   root.dataset.themeMode = themeMode;
   root.style.colorScheme = themeMode;

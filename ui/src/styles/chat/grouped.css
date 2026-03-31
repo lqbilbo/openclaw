@@ -325,10 +325,12 @@ img.chat-avatar {
 }
 
 @keyframes pulsing-border {
+
   0%,
   100% {
     border-color: var(--border);
   }
+
   50% {
     border-color: var(--accent);
   }
@@ -344,6 +346,7 @@ img.chat-avatar {
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -470,4 +473,77 @@ img.chat-avatar {
 
 .chat-delete-confirm__yes:hover {
   background: #dc2626;
+}
+
+/* =============================================
+   OPENAGENT THEME OVERRIDES - Warm, minimal, no bubbles
+   ============================================= */
+
+:root[data-theme="openagent"] .chat-bubble {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+:root[data-theme="openagent"] .chat-bubble:hover {
+  background: transparent;
+}
+
+:root[data-theme="openagent"] .chat-group.user .chat-bubble {
+  background: transparent;
+  border: none;
+}
+
+:root[data-theme="openagent"] .chat-group.user .chat-bubble:hover {
+  background: transparent;
+}
+
+/* openagent: assistant messages as clean white cards */
+:root[data-theme="openagent"] .chat-group:not(.user) .chat-group-messages {
+  background: #faf8f4;
+  border: 1px solid #d8d4cc;
+  border-radius: 16px;
+  padding: 16px 20px;
+  max-width: min(820px, calc(100% - 52px));
+}
+
+/* openagent: user messages as subtle warm pill */
+:root[data-theme="openagent"] .chat-group.user .chat-group-messages {
+  background: #e8e4dc;
+  border: 1px solid #ccc8c0;
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+:root[data-theme="openagent"] .chat-group {
+  margin-bottom: 20px;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+:root[data-theme="openagent"] .chat-avatar {
+  display: none;
+}
+
+:root[data-theme="openagent"] .chat-group-messages {
+  max-width: min(820px, 100%);
+}
+
+:root[data-theme="openagent"] .chat-sender-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8880;
+  margin-bottom: 6px;
+}
+
+:root[data-theme="openagent"] .chat-group-footer {
+  margin-top: 8px;
+}
+
+:root[data-theme="openagent"] .chat-bubble.streaming {
+  animation: none;
 }

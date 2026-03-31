@@ -12,15 +12,15 @@ export function renderLoginGate(state: AppViewState) {
 
   return html`
     <div class="login-gate">
-      <div class="login-gate__theme">${renderThemeToggle(state)}</div>
+      <!-- <div class="login-gate__theme">${renderThemeToggle(state)}</div> -->
       <div class="login-gate__card">
         <div class="login-gate__header">
-          <img class="login-gate__logo" src=${faviconSrc} alt="OpenClaw" />
-          <div class="login-gate__title">OpenClaw</div>
+          <img class="login-gate__logo" src=${faviconSrc} alt="OpenAgent" />
+          <div class="login-gate__title">OpenAgent</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">
-          <label class="field">
+          <!-- <label class="field">
             <span>${t("overview.access.wsUrl")}</span>
             <input
               .value=${state.settings.gatewayUrl}
@@ -30,7 +30,7 @@ export function renderLoginGate(state: AppViewState) {
               }}
               placeholder="ws://127.0.0.1:18789"
             />
-          </label>
+          </label> -->
           <label class="field">
             <span>${t("overview.access.token")}</span>
             <div class="login-gate__secret-row">
@@ -111,7 +111,7 @@ export function renderLoginGate(state: AppViewState) {
               </div>`
             : ""
         }
-        <div class="login-gate__help">
+        <!-- <div class="login-gate__help">
           <div class="login-gate__help-title">${t("overview.connection.title")}</div>
           <ol class="login-gate__steps">
             <li>${t("overview.connection.step1")}<code>openclaw gateway run</code></li>
@@ -126,7 +126,7 @@ export function renderLoginGate(state: AppViewState) {
               rel="noreferrer"
             >${t("overview.connection.docsLink")}</a>
           </div>
-        </div>
+        </div> -->
       </div>
     </div>
   `;

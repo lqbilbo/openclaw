@@ -451,8 +451,8 @@ export function renderApp(state: AppViewState) {
             ? nothing
             : html`
           <div class="sidebar-brand">
-            <img class="sidebar-brand__logo" src="${agentLogoUrl(basePath)}" alt="OpenClaw" />
-            <span class="sidebar-brand__title">OpenClaw</span>
+            <img class="sidebar-brand__logo" src="${agentLogoUrl(basePath)}" alt="OpenAgent" />
+            <span class="sidebar-brand__title">OpenAgent</span>
           </div>
         `
         }
