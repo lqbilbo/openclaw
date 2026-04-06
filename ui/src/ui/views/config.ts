@@ -511,6 +511,7 @@ const THEME_OPTIONS: ThemeOption[] = [
   { id: "claw", label: "Claw", description: "Chroma family", icon: icons.zap },
   { id: "knot", label: "Knot", description: "Knot family", icon: icons.link },
   { id: "dash", label: "Dash", description: "Field family", icon: icons.barChart },
+  { id: "openagent", label: "OpenAgent", description: "OpenAgent family", icon: icons.brain },
 ];
 
 function renderAppearanceSection(props: ConfigProps) {
