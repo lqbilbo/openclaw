@@ -34,7 +34,7 @@ export const zh_CN: TranslationMap = {
     cron: "定时任务",
     skills: "技能",
     nodes: "节点",
-    chat: "聊天",
+    chat: "任务",
     config: "配置",
     communications: "通信",
     appearance: "外观与设置",

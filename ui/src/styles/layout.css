@@ -985,3 +985,31 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===========================================
+   OpenAgent theme: hide left navigation sidebar
+   =========================================== */
+
+:root[data-theme="openknot-light"] .shell {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+:root[data-theme="openknot-light"] .shell-nav {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+:root[data-theme="openknot"] .shell {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+:root[data-theme="openknot"] .shell-nav {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
