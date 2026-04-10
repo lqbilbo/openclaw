@@ -7,7 +7,7 @@
   --shell-gap: 16px;
   --shell-nav-width: 220px;
   --shell-nav-rail-width: 72px;
-  --shell-topbar-height: 52px;
+  --shell-topbar-height: 0px;
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
   height: 100vh;

@@ -226,6 +226,15 @@ export function connectGateway(host: GatewayHost) {
       void loadNodes(host as unknown as OpenClawApp, { quiet: true });
       void loadDevices(host as unknown as OpenClawApp, { quiet: true });
       void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
+      void client
+        .request("system.info", {})
+        .then((res) => {
+          if (host.client !== client) {
+            return;
+          }
+          (host as unknown as { systemInfo: unknown }).systemInfo = res ?? null;
+        })
+        .catch(() => {});
     },
     onClose: ({ code, reason, error }) => {
       if (host.client !== client) {

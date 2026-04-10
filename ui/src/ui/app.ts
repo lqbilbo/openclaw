@@ -136,6 +136,12 @@ export class OpenClawApp extends LitElement {
   @state() themeResolved: ResolvedTheme = "dark";
   @state() themeOrder: ThemeName[] = this.buildThemeOrder(this.theme);
   @state() hello: GatewayHelloOk | null = null;
+  @state() systemInfo: {
+    cpus: number;
+    totalMemory: number;
+    freeMemory: number;
+    disk: { total: number; free: number } | null;
+  } | null = null;
   @state() lastError: string | null = null;
   @state() lastErrorCode: string | null = null;
   @state() eventLog: EventLogEntry[] = [];

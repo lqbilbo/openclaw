@@ -103,9 +103,8 @@ function renderCronFilterIcon(hiddenCount: number) {
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
-      ${
-        hiddenCount > 0
-          ? html`<span
+      ${hiddenCount > 0
+        ? html`<span
             style="
               position: absolute;
               top: -5px;
@@ -118,10 +117,9 @@ function renderCronFilterIcon(hiddenCount: number) {
               padding: 1px 3px;
               pointer-events: none;
             "
-          >${hiddenCount}</span
+            >${hiddenCount}</span
           >`
-          : ""
-      }
+        : ""}
     </span>
   `;
 }
@@ -151,14 +149,59 @@ export function renderChatSessionSelect(state: AppViewState) {
                   group.options,
                   (entry) => entry.key,
                   (entry) =>
-                    html`<option value=${entry.key} title=${entry.title}>
-                      ${entry.label}
-                    </option>`,
+                    html`<option value=${entry.key} title=${entry.title}>${entry.label}</option>`,
                 )}
               </optgroup>`,
           )}
         </select>
       </label>
+    </div>
+  `;
+}
+
+export function renderChatRefreshOnly(state: AppViewState) {
+  const refreshIcon = html`
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+      <path d="M21 3v5h-5"></path>
+    </svg>
+  `;
+  return html`
+    <div class="chat-controls">
+      <button
+        class="btn btn--sm btn--icon"
+        ?disabled=${state.chatLoading || !state.connected}
+        @click=${async () => {
+          const app = state as unknown as OpenClawApp;
+          app.chatManualRefreshInFlight = true;
+          app.chatNewMessagesBelow = false;
+          await app.updateComplete;
+          app.resetToolStream();
+          try {
+            await refreshChat(state as unknown as Parameters<typeof refreshChat>[0], {
+              scheduleScroll: false,
+            });
+            app.scrollToBottom({ smooth: true });
+          } finally {
+            requestAnimationFrame(() => {
+              app.chatManualRefreshInFlight = false;
+              app.chatNewMessagesBelow = false;
+            });
+          }
+        }}
+        title=${t("chat.refreshTitle")}
+      >
+        ${refreshIcon}
+      </button>
     </div>
   `;
 }
@@ -273,13 +316,11 @@ export function renderChatControls(state: AppViewState) {
           state.sessionsHideCron = !hideCron;
         }}
         aria-pressed=${hideCron}
-        title=${
-          hideCron
-            ? hiddenCronCount > 0
-              ? t("chat.showCronSessionsHidden", { count: String(hiddenCronCount) })
-              : t("chat.showCronSessions")
-            : t("chat.hideCronSessions")
-        }
+        title=${hideCron
+          ? hiddenCronCount > 0
+            ? t("chat.showCronSessionsHidden", { count: String(hiddenCronCount) })
+            : t("chat.showCronSessions")
+          : t("chat.hideCronSessions")}
       >
         ${renderCronFilterIcon(hiddenCronCount)}
       </button>
@@ -596,7 +637,9 @@ export function renderTopbarThemeModeToggle(state: AppViewState) {
         (opt) => html`
           <button
             type="button"
-            class="topbar-theme-mode__btn ${opt.id === state.themeMode ? "topbar-theme-mode__btn--active" : ""}"
+            class="topbar-theme-mode__btn ${opt.id === state.themeMode
+              ? "topbar-theme-mode__btn--active"
+              : ""}"
             title=${opt.label}
             aria-label="Color mode: ${opt.label}"
             aria-pressed=${opt.id === state.themeMode}
@@ -663,19 +706,22 @@ export function renderThemeToggle(state: AppViewState) {
         aria-haspopup="menu"
         aria-expanded="false"
         @click=${toggleOpen}
-      >${currentThemeIcon(state.theme)}</button>
+      >
+        ${currentThemeIcon(state.theme)}
+      </button>
       <div class="theme-orb__menu" role="menu" aria-hidden="true">
         ${THEME_OPTIONS.map(
-          (opt) => html`
-            <button
-              type="button"
-              class="theme-orb__option ${opt.id === state.theme ? "theme-orb__option--active" : ""}"
-              title=${opt.label}
-              role="menuitemradio"
-              aria-checked=${opt.id === state.theme}
-              aria-label=${opt.label}
-              @click=${(e: Event) => pick(opt, e)}
-            >${opt.icon}</button>`,
+          (opt) => html` <button
+            type="button"
+            class="theme-orb__option ${opt.id === state.theme ? "theme-orb__option--active" : ""}"
+            title=${opt.label}
+            role="menuitemradio"
+            aria-checked=${opt.id === state.theme}
+            aria-label=${opt.label}
+            @click=${(e: Event) => pick(opt, e)}
+          >
+            ${opt.icon}
+          </button>`,
         )}
       </div>
     </div>

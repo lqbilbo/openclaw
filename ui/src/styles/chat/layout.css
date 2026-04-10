@@ -358,7 +358,7 @@
 .agent-chat__input>textarea {
   width: 100%;
   min-height: 40px;
-  max-height: 150px;
+  max-height: 300px;
   resize: none;
   padding: 12px 14px 8px;
   border: none;
@@ -826,6 +826,25 @@
 }
 
 /* Welcome state (new session) */
+.chat--welcome .chat-split-container {
+  flex: 0 1 auto;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.chat--welcome .chat-thread {
+  flex: 0 1 auto;
+  overflow-y: visible;
+}
+
+.chat--welcome .agent-chat__input {
+  position: static;
+}
+.chat-thread-inner {
+  display: flex;
+  flex-direction: column;
+}
+
 .agent-chat__welcome {
   display: flex;
   flex-direction: column;
@@ -833,9 +852,34 @@
   justify-content: center;
   text-align: center;
   gap: 12px;
-  padding: 48px 24px;
-  flex: 1;
-  min-height: 0;
+  padding: 24px;
+}
+
+.agent-chat__sysinfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 14px;
+  margin: 0 18px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.agent-chat__sysinfo span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.agent-chat__sysinfo svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .agent-chat__welcome-glow {

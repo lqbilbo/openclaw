@@ -1,3 +1,5 @@
+import { statfs } from "node:fs/promises";
+import os from "node:os";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
 import {
   loadOrCreateDeviceIdentity,
@@ -145,5 +147,18 @@ export const systemHandlers: GatewayRequestHandlers = {
       getHealthVersion: context.getHealthVersion,
     });
     respond(true, { ok: true }, undefined);
+  },
+  "system.info": async ({ respond }) => {
+    const cpus = os.cpus().length;
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    let disk: { total: number; free: number } | null = null;
+    try {
+      const s = await statfs(os.homedir());
+      disk = { total: s.blocks * s.bsize, free: s.bfree * s.bsize };
+    } catch {
+      // statfs not available on all platforms
+    }
+    respond(true, { cpus, totalMemory, freeMemory, disk }, undefined);
   },
 };

@@ -7,7 +7,7 @@ import { t } from "../i18n/index.ts";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderUsageTab } from "./app-render-usage-tab.ts";
 import {
-  renderChatControls,
+  renderChatRefreshOnly,
   renderChatSessionSelect,
   renderTab,
   renderTopbarThemeModeToggle,
@@ -75,7 +75,6 @@ import {
   updateSkillEnabled,
 } from "./controllers/skills.ts";
 import "./components/dashboard-header.ts";
-import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "./external-link.ts";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { agentLogoUrl } from "./views/agents-utils.ts";
@@ -426,7 +425,7 @@ export function renderApp(state: AppViewState) {
         : ""} ${state.onboarding ? "shell--onboarding" : ""}"
       style="--shell-nav-width: ${state.settings.navWidth}px"
     >
-      <header class="topbar">
+      <header class="topbar" style="display:none">
         <dashboard-header .tab=${state.tab}></dashboard-header>
         <button
           class="topbar-search"
@@ -508,37 +507,7 @@ export function renderApp(state: AppViewState) {
             })}
           </nav>
 
-          <div class="sidebar-footer">
-            <div class="sidebar-footer__docs-block">
-              <a
-                class="nav-item nav-item--external"
-                href="https://docs.openclaw.ai"
-                target=${EXTERNAL_LINK_TARGET}
-                rel=${buildExternalLinkRel()}
-                title="${t("common.docs")} (opens in new tab)"
-              >
-                <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
-                ${!state.settings.navCollapsed
-                  ? html`
-                      <span class="nav-item__text">${t("common.docs")}</span>
-                      <span class="nav-item__external-icon">${icons.externalLink}</span>
-                    `
-                  : nothing}
-              </a>
-              ${(() => {
-                const version = state.hello?.server?.version ?? "";
-                return version
-                  ? html`
-                      <div class="sidebar-version" title=${`v${version}`}>
-                        ${!state.settings.navCollapsed
-                          ? html`<span class="sidebar-version__text">v${version}</span>`
-                          : html` <span class="sidebar-version__dot"></span> `}
-                      </div>
-                    `
-                  : nothing;
-              })()}
-            </div>
-          </div>
+          <div class="sidebar-footer"></div>
         </aside>
         ${!state.settings.navCollapsed && !chatFocus
           ? html`
@@ -559,7 +528,7 @@ export function renderApp(state: AppViewState) {
         ${state.tab === "config"
           ? nothing
           : html`<section class="content-header">
-              <div>
+              <div style="display:none">
                 ${isChat
                   ? renderChatSessionSelect(state)
                   : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
@@ -567,9 +536,9 @@ export function renderApp(state: AppViewState) {
               </div>
               <div class="page-meta">
                 ${state.lastError
-                  ? html`<div class="pill danger">${state.lastError}</div>`
+                  ? html`<div class="pill danger" style="display:none">${state.lastError}</div>`
                   : nothing}
-                ${isChat ? renderChatControls(state) : nothing}
+                ${isChat ? renderChatRefreshOnly(state) : nothing}
               </div>
             </section>`}
         ${state.tab === "overview"
@@ -1367,6 +1336,8 @@ export function renderApp(state: AppViewState) {
               assistantName: state.assistantName,
               assistantAvatar: state.assistantAvatar,
               basePath: state.basePath ?? "",
+              systemInfo: (state as unknown as { systemInfo: unknown })
+                .systemInfo as ChatProps["systemInfo"],
             })
           : nothing}
         ${state.tab === "config"
