@@ -33,12 +33,29 @@
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
+  grid-template-columns: var(--shell-nav-width) 220px minmax(0, 1fr);
+  grid-template-areas:
+    "topbar topbar topbar"
+    "nav fstree content";
 }
 
 @supports (height: 100dvh) {
   .shell--chat {
     height: 100dvh;
   }
+}
+
+.shell--chat.shell--nav-collapsed {
+  grid-template-columns: var(--shell-nav-rail-width) 220px minmax(0, 1fr);
+}
+
+.shell--chat.shell--chat-focus {
+  grid-template-columns: 0px 0px minmax(0, 1fr);
+}
+
+.shell--chat.shell--chat-focus .fs-tree-panel {
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .shell--nav-collapsed {
@@ -988,7 +1005,7 @@
 
 /* ===========================================
    OpenAgent theme: hide left navigation sidebar
-   =========================================== */
+   =========================================== 
 
 :root[data-theme="openknot-light"] .shell {
   grid-template-columns: 0 minmax(0, 1fr);
@@ -1012,4 +1029,190 @@
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
+}*/
+
+/* ===========================================
+   File Tree Panel (chat tab secondary sidebar)
+   =========================================== */
+
+.fs-tree-panel {
+  grid-area: fstree;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+  min-height: 0;
+}
+
+:root[data-theme-mode="light"] .fs-tree-panel {
+  background: var(--panel);
+}
+
+.fs-tree-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.fs-tree-panel__title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.fs-tree-panel__refresh {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.fs-tree-panel__refresh:hover {
+  color: var(--text);
+}
+
+.fs-tree-panel__refresh svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fs-tree-panel__upload {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.fs-tree-panel__upload:hover {
+  color: var(--text);
+}
+
+.fs-tree-panel__upload svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fs-tree-panel__upload:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.fs-tree-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.fs-tree__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fs-tree__item--dir {
+  cursor: pointer;
+}
+
+.fs-tree__item--dir:hover {
+  background: var(--hover);
+}
+
+.fs-tree__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.fs-tree__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fs-tree__item--dir .fs-tree__icon {
+  color: var(--accent);
+}
+
+.fs-tree__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fs-tree__chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.fs-tree__chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+.fs-tree__loading,
+.fs-tree__error {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.fs-tree__error {
+  color: var(--danger);
+}
+
+.fs-tree__copy {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out, background 120ms ease-out;
+}
+
+.fs-tree__copy svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fs-tree__item:hover .fs-tree__copy {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fs-tree__copy:hover {
+  background: var(--hover);
+  color: var(--text);
 }

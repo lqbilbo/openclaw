@@ -20,7 +20,7 @@ export function renderLoginGate(state: AppViewState) {
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">
-          <!-- <label class="field">
+          <label class="field">
             <span>${t("overview.access.wsUrl")}</span>
             <input
               .value=${state.settings.gatewayUrl}
@@ -30,7 +30,7 @@ export function renderLoginGate(state: AppViewState) {
               }}
               placeholder="ws://127.0.0.1:18789"
             />
-          </label> -->
+          </label>
           <label class="field">
             <span>${t("overview.access.token")}</span>
             <div class="login-gate__secret-row">
@@ -97,20 +97,15 @@ export function renderLoginGate(state: AppViewState) {
               </button>
             </div>
           </label>
-          <button
-            class="btn primary login-gate__connect"
-            @click=${() => state.connect()}
-          >
+          <button class="btn primary login-gate__connect" @click=${() => state.connect()}>
             ${t("common.connect")}
           </button>
         </div>
-        ${
-          state.lastError
-            ? html`<div class="callout danger" style="margin-top: 14px;">
-                <div>${state.lastError}</div>
-              </div>`
-            : ""
-        }
+        ${state.lastError
+          ? html`<div class="callout danger" style="margin-top: 14px;">
+              <div>${state.lastError}</div>
+            </div>`
+          : ""}
         <!-- <div class="login-gate__help">
           <div class="login-gate__help-title">${t("overview.connection.title")}</div>
           <ol class="login-gate__steps">

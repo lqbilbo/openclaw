@@ -58,6 +58,10 @@ import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./contro
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
+import {
+  loadFsTree as loadFsTreeInternal,
+  loadFsTreeSubdir as loadFsTreeSubdirInternal,
+} from "./controllers/fs-tree.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
@@ -427,6 +431,12 @@ export class OpenClawApp extends LitElement {
   @state() logsMaxBytes = 250_000;
   @state() logsAtBottom = true;
 
+  @state() fsTreeLoading = false;
+  @state() fsTreeDir = "";
+  @state() fsTreeItems: import("./controllers/fs-tree.ts").FsEntry[] = [];
+  @state() fsTreeError: string | null = null;
+  @state() fsTreeExpanded: Record<string, import("./controllers/fs-tree.ts").FsEntry[]> = {};
+
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;
   private chatScrollTimeout: number | null = null;
@@ -568,6 +578,23 @@ export class OpenClawApp extends LitElement {
 
   async loadCron() {
     await loadCronInternal(this as unknown as Parameters<typeof loadCronInternal>[0]);
+  }
+
+  async handleLoadFsTree(dir?: string) {
+    await loadFsTreeInternal(this as unknown as Parameters<typeof loadFsTreeInternal>[0], dir);
+  }
+
+  async handleFsTreeToggleDir(dir: string) {
+    if (this.fsTreeExpanded[dir]) {
+      const next = { ...this.fsTreeExpanded };
+      delete next[dir];
+      this.fsTreeExpanded = next;
+    } else {
+      await loadFsTreeSubdirInternal(
+        this as unknown as Parameters<typeof loadFsTreeSubdirInternal>[0],
+        dir,
+      );
+    }
   }
 
   async handleAbortChat() {

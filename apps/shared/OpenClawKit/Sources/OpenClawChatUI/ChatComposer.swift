@@ -154,14 +154,14 @@ struct OpenClawChatComposer: View {
         Button {
             self.pickFilesMac()
         } label: {
-            Image(systemName: "paperclip")
+            Image(systemName: "photo")
         }
         .help("Add Image")
         .buttonStyle(.bordered)
         .controlSize(.small)
         #else
         PhotosPicker(selection: self.$pickerItems, maxSelectionCount: 8, matching: .images) {
-            Image(systemName: "paperclip")
+            Image(systemName: "photo")
         }
         .help("Add Image")
         .buttonStyle(.bordered)

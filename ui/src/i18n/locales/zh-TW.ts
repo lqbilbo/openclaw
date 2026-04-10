@@ -16,7 +16,7 @@ export const zh_TW: TranslationMap = {
     search: "搜尋",
   },
   nav: {
-    chat: "聊天",
+    chat: "會話",
     control: "控制",
     agent: "代理",
     settings: "設置",

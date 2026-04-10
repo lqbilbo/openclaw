@@ -86,6 +86,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "talk.config",
     "agents.files.list",
     "agents.files.get",
+    "fs.list",
   ],
   [WRITE_SCOPE]: [
     "send",
@@ -130,6 +131,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "set-heartbeats",
     "system-event",
     "agents.files.set",
+    "fs.upload",
   ],
 };
 

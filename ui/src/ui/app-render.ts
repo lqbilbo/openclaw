@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import {
   buildAgentMainSessionKey,
   parseAgentSessionKey,
@@ -553,6 +553,7 @@ export function renderApp(state: AppViewState) {
             `
           : nothing}
       </div>
+      ${isChat ? renderFsTreePanel(state) : nothing}
       <main class="content ${isChat ? "content--chat" : ""}">
         ${nothing}
         ${state.tab === "config"
@@ -1803,5 +1804,110 @@ export function renderApp(state: AppViewState) {
       </main>
       ${renderExecApprovalPrompt(state)} ${renderGatewayUrlConfirmation(state)} ${nothing}
     </div>
+  `;
+}
+
+export function renderFsTreePanel(state: AppViewState) {
+  const { fsTreeLoading, fsTreeDir, fsTreeItems, fsTreeError, fsTreeExpanded } = state;
+
+  if (!state.connected) {
+    return nothing;
+  }
+
+  // Load on first render
+  if (!fsTreeLoading && !fsTreeDir && !fsTreeError) {
+    void state.handleLoadFsTree();
+  }
+
+  function renderEntries(items: typeof fsTreeItems, depth: number): TemplateResult[] {
+    return items.map((item) => {
+      const expanded = Boolean(fsTreeExpanded[item.path]);
+      const indent = depth * 12;
+      return html`
+        <div
+          class="fs-tree__item ${item.isDir ? "fs-tree__item--dir" : ""}"
+          style="padding-left: ${indent}px"
+          @click=${() => item.isDir && state.handleFsTreeToggleDir(item.path)}
+          title=${item.path}
+        >
+          <span class="fs-tree__icon" aria-hidden="true">
+            ${item.isDir ? icons.folder : icons.fileText}
+          </span>
+          <span class="fs-tree__name">${item.name}</span>
+          ${item.isDir
+            ? html`<span class="fs-tree__chevron"
+                >${expanded ? icons.chevronDown : icons.chevronRight}</span
+              >`
+            : html`<button
+                class="fs-tree__copy"
+                title="Copy path"
+                @click=${(e: Event) => {
+                  e.stopPropagation();
+                  void navigator.clipboard.writeText(item.path);
+                }}
+              >
+                ${icons.copy}
+              </button>`}
+        </div>
+        ${expanded && fsTreeExpanded[item.path]
+          ? renderEntries(fsTreeExpanded[item.path], depth + 1)
+          : nothing}
+      `;
+    });
+  }
+
+  return html`
+    <aside class="fs-tree-panel">
+      <div class="fs-tree-panel__header">
+        <span class="fs-tree-panel__title">文件</span>
+        <input
+          type="file"
+          accept=".zip,.xlsx,.xls,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          class="fs-tree-panel__upload-input"
+          style="display:none"
+          @change=${async (e: Event) => {
+            const input = e.target as HTMLInputElement;
+            const file = input.files?.[0];
+            if (file && state.client && state.connected) {
+              const buffer = await file.arrayBuffer();
+              const bytes = new Uint8Array(buffer);
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+              }
+              await state.client.request("fs.upload", { name: file.name, data: btoa(binary) });
+              void state.handleLoadFsTree(fsTreeDir || undefined);
+            }
+            input.value = "";
+          }}
+        />
+        <div style="display:flex;gap:2px">
+          <button
+            class="fs-tree-panel__upload"
+            title="Upload file"
+            ?disabled=${!state.connected}
+            @click=${() => {
+              (document.querySelector(".fs-tree-panel__upload-input") as HTMLInputElement)?.click();
+            }}
+          >
+            ${icons.upload}
+          </button>
+          <button
+            class="fs-tree-panel__refresh"
+            title="Refresh"
+            @click=${() => state.handleLoadFsTree(fsTreeDir || undefined)}
+          >
+            ${icons.refresh}
+          </button>
+        </div>
+      </div>
+      <div class="fs-tree-panel__body">
+        ${fsTreeLoading
+          ? html`<div class="fs-tree__loading">加载中…</div>`
+          : fsTreeError
+            ? html`<div class="fs-tree__error">${fsTreeError}</div>`
+            : renderEntries(fsTreeItems, 0)}
+      </div>
+    </aside>
   `;
 }

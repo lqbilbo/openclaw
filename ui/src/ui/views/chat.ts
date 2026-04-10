@@ -1236,7 +1236,7 @@ export function renderChat(props: ChatProps) {
               title="Attach file"
               ?disabled=${!props.connected}
             >
-              ${icons.paperclip}
+              ${icons.image}
             </button>
 
             ${isSttSupported()

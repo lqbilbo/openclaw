@@ -4,6 +4,7 @@ import type { CronModelSuggestionsState, CronState } from "./controllers/cron.ts
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
+import type { FsTreeState } from "./controllers/fs-tree.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
@@ -364,4 +365,9 @@ export type AppViewState = {
     handleOpenSidebar: (content: string) => void;
     handleCloseSidebar: () => void;
     handleSplitRatioChange: (ratio: number) => void;
-  };
+    handleLoadFsTree: (dir?: string) => Promise<void>;
+    handleFsTreeToggleDir: (dir: string) => Promise<void>;
+  } & Pick<
+    FsTreeState,
+    "fsTreeLoading" | "fsTreeDir" | "fsTreeItems" | "fsTreeError" | "fsTreeExpanded"
+  >;
