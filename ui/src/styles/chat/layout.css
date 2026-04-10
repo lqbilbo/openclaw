@@ -826,6 +826,49 @@
 }
 
 /* Welcome state (new session) */
+.chat-top-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 45%;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-top-panel__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-top-panel__tab {
+  padding: 4px 14px;
+  font-size: 13px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom: 2px solid transparent;
+}
+
+.chat-top-panel__tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.chat-top-panel__frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+}
+
+/* Welcome state (new session) */
+.chat--welcome .chat-top-panel {
+  display: none;
+}
+
 .chat--welcome .chat-split-container {
   flex: 0 1 auto;
   margin-top: auto;

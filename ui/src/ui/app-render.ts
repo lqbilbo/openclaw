@@ -442,7 +442,7 @@ export function renderApp(state: AppViewState) {
       </header>
       <div class="shell-nav">
         <aside class="sidebar ${state.settings.navCollapsed ? "sidebar--collapsed" : ""}">
-          <div class="sidebar-header">
+          <div class="sidebar-header" style="display:none">
             ${state.settings.navCollapsed
               ? nothing
               : html`
@@ -1833,7 +1833,6 @@ export function renderFsTreePanel(state: AppViewState) {
         <span class="fs-tree-panel__title">文件</span>
         <input
           type="file"
-          accept=".zip,.xlsx,.xls,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
           class="fs-tree-panel__upload-input"
           style="display:none"
           @change=${async (e: Event) => {

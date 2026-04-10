@@ -156,6 +156,7 @@ interface ChatEphemeralState {
   searchOpen: boolean;
   searchQuery: string;
   pinnedExpanded: boolean;
+  topPanelTab: number;
 }
 
 function createChatEphemeralState(): ChatEphemeralState {
@@ -171,6 +172,7 @@ function createChatEphemeralState(): ChatEphemeralState {
     searchOpen: false,
     searchQuery: "",
     pinnedExpanded: false,
+    topPanelTab: 1,
   };
 }
 
@@ -1136,6 +1138,41 @@ export function renderChat(props: ChatProps) {
           `
         : nothing}
       ${renderSearchBar(requestUpdate)} ${renderPinnedSection(props, pinned, requestUpdate)}
+
+      <div class="chat-top-panel">
+        <div class="chat-top-panel__tabs">
+          <button
+            class="chat-top-panel__tab ${vs.topPanelTab === 1 ? "chat-top-panel__tab--active" : ""}"
+            @click=${() => {
+              vs.topPanelTab = 1;
+              requestUpdate();
+            }}
+          >
+            任务执行图
+          </button>
+          <button
+            class="chat-top-panel__tab ${vs.topPanelTab !== 1 ? "chat-top-panel__tab--active" : ""}"
+            @click=${() => {
+              vs.topPanelTab = 2;
+              requestUpdate();
+            }}
+          >
+            任务轨迹
+          </button>
+        </div>
+        <iframe
+          class="chat-top-panel__frame"
+          src="https://www.baidu.com"
+          style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+        ></iframe>
+        <iframe
+          class="chat-top-panel__frame"
+          src="https://www.sf-express.com"
+          style="display:${vs.topPanelTab === 1 ? "none" : "block"}"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+        ></iframe>
+      </div>
 
       <div class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}">
         <div

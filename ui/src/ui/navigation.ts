@@ -134,7 +134,7 @@ export function iconForTab(tab: Tab): IconName {
     case "agents":
       return "folder";
     case "chat":
-      return "messageSquare";
+      return "folder";
     case "overview":
       return "barChart";
     case "channels":
@@ -148,7 +148,7 @@ export function iconForTab(tab: Tab): IconName {
     case "cron":
       return "loader";
     case "skills":
-      return "zap";
+      return "plug";
     case "nodes":
       return "monitor";
     case "config":
@@ -162,7 +162,7 @@ export function iconForTab(tab: Tab): IconName {
     case "infrastructure":
       return "globe";
     case "aiAgents":
-      return "brain";
+      return "settings";
     case "debug":
       return "bug";
     case "logs":

@@ -132,7 +132,7 @@ export function loadSettings(): UiSettings {
     chatFocusMode: false,
     chatShowThinking: true,
     splitRatio: 0.6,
-    navCollapsed: false,
+    navCollapsed: true,
     navWidth: 220,
     navGroupsCollapsed: {},
   };
