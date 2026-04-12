@@ -16,21 +16,21 @@ export function renderLoginGate(state: AppViewState) {
       <div class="login-gate__card">
         <div class="login-gate__header">
           <img class="login-gate__logo" src=${faviconSrc} alt="OpenAgent" />
-          <div class="login-gate__title">OpenAgent</div>
+          <div class="login-gate__title">OpenAgent管理平台</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">
-          <label class="field">
+          <!-- <label class="field">
             <span>${t("overview.access.wsUrl")}</span>
             <input
               .value=${state.settings.gatewayUrl}
               @input=${(e: Event) => {
-                const v = (e.target as HTMLInputElement).value;
-                state.applySettings({ ...state.settings, gatewayUrl: v });
-              }}
+            const v = (e.target as HTMLInputElement).value;
+            state.applySettings({ ...state.settings, gatewayUrl: v });
+          }}
               placeholder="ws://127.0.0.1:18789"
             />
-          </label>
+          </label>-->
           <label class="field">
             <span>${t("overview.access.token")}</span>
             <div class="login-gate__secret-row">

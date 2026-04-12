@@ -218,7 +218,7 @@ export function resolveAgentAvatarUrl(
 
 export function agentLogoUrl(basePath: string): string {
   const base = basePath?.trim() ? basePath.replace(/\/$/, "") : "";
-  return base ? `${base}/guangzhoushiyanshi.png` : "guangzhoushiyanshi.png";
+  return base ? `${base}/openagent1.png` : "openagent1.png";
 }
 
 function isLikelyEmoji(value: string) {
@@ -581,9 +581,7 @@ export function buildModelOptions(
     options.unshift({ value: current, label: `Current (${current})` });
   }
   if (options.length === 0) {
-    return html`
-      <option value="" disabled>No configured models</option>
-    `;
+    return html` <option value="" disabled>No configured models</option> `;
   }
   return options.map((option) => html`<option value=${option.value}>${option.label}</option>`);
 }

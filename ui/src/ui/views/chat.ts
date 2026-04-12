@@ -1162,13 +1162,13 @@ export function renderChat(props: ChatProps) {
         </div>
         <iframe
           class="chat-top-panel__frame"
-          src="https://www.baidu.com"
+          src="http://localhost:3000/task-graph"
           style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
         <iframe
           class="chat-top-panel__frame"
-          src="https://www.sf-express.com"
+          src="http://localhost:3000/task-trace"
           style="display:${vs.topPanelTab === 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
