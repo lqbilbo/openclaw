@@ -1154,7 +1154,7 @@ export function renderChat(props: ChatProps) {
       <div class="chat-top-panel">
         <iframe
           class="chat-top-panel__frame"
-          src="http://localhost:15373/list"
+          src="http://10.1.111.12:15373/list"
           style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
