@@ -3,19 +3,22 @@ import { t } from "../../i18n/index.ts";
 import { renderThemeToggle } from "../app-render.helpers.ts";
 import type { AppViewState } from "../app-view-state.ts";
 import { icons } from "../icons.ts";
-import { normalizeBasePath } from "../navigation.ts";
-import { agentLogoUrl } from "./agents-utils.ts";
+// import { normalizeBasePath } from "../navigation.ts";
+// import { agentLogoUrl } from "./agents-utils.ts";
 
 export function renderLoginGate(state: AppViewState) {
-  const basePath = normalizeBasePath(state.basePath ?? "");
-  const faviconSrc = agentLogoUrl(basePath);
+  // const basePath = normalizeBasePath(state.basePath ?? "");
+  // const faviconSrc = agentLogoUrl(basePath);
 
   return html`
     <div class="login-gate">
       <!-- <div class="login-gate__theme">${renderThemeToggle(state)}</div> -->
       <div class="login-gate__card">
         <div class="login-gate__header">
-          <img class="login-gate__logo" src=${faviconSrc} alt="OpenAgent" />
+          <div class="login-gate__logo">
+            <img class="left" src="/beidianshuzhi.png" alt="北电数智" />
+            <img class="right" src="/guangzhoushiyanshi.png" alt="广州实验室" />
+          </div>
           <div class="login-gate__title">OpenAgent</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
@@ -25,9 +28,9 @@ export function renderLoginGate(state: AppViewState) {
             <input
               .value=${state.settings.gatewayUrl}
               @input=${(e: Event) => {
-            const v = (e.target as HTMLInputElement).value;
-            state.applySettings({ ...state.settings, gatewayUrl: v });
-          }}
+                const v = (e.target as HTMLInputElement).value;
+                state.applySettings({ ...state.settings, gatewayUrl: v });
+              }}
               placeholder="ws://127.0.0.1:18789"
             />
           </label>-->
@@ -101,11 +104,13 @@ export function renderLoginGate(state: AppViewState) {
             ${t("common.connect")}
           </button>
         </div>
-        ${state.lastError
-          ? html`<div class="callout danger" style="margin-top: 14px;">
+        ${
+          state.lastError
+            ? html`<div class="callout danger" style="margin-top: 14px;">
               <div>${state.lastError}</div>
             </div>`
-          : ""}
+            : ""
+        }
         <!-- <div class="login-gate__help">
           <div class="login-gate__help-title">${t("overview.connection.title")}</div>
           <ol class="login-gate__steps">

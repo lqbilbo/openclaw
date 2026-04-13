@@ -1866,12 +1866,7 @@ export function renderFsTreePanel(state: AppViewState) {
             ${item.isDir ? icons.folder : icons.fileText}
           </span>
           <span class="fs-tree__name">${item.name}</span>
-          ${
-            item.isDir
-              ? html`<span class="fs-tree__chevron"
-                >${expanded ? icons.chevronDown : icons.chevronRight}</span
-              >`
-              : html`<button
+          ${html`<button
                 class="fs-tree__copy"
                 title="Copy path"
                 @click=${(e: Event) => {
@@ -1880,8 +1875,7 @@ export function renderFsTreePanel(state: AppViewState) {
                 }}
               >
                 ${icons.copy}
-              </button>`
-          }
+              </button>`}
         </div>
         ${
           expanded && fsTreeExpanded[item.path]
@@ -1927,13 +1921,13 @@ export function renderFsTreePanel(state: AppViewState) {
           >
             ${icons.upload}
           </button>
-          <button
+          <!--<button
             class="fs-tree-panel__refresh"
             title="Refresh"
             @click=${() => state.handleLoadFsTree(fsTreeDir || undefined)}
           >
             ${icons.refresh}
-          </button>
+          </button>-->
         </div>
       </div>
       <div class="fs-tree-panel__body">

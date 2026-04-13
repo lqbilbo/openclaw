@@ -36,9 +36,21 @@
 }
 
 .login-gate__logo {
-  width: 148px;
-  height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
   margin-bottom: 3px;
+}
+
+.login-gate__logo .left {
+  width: 182px;
+  height: 48px;
+}
+
+.login-gate__logo .right {
+  width: 138px;
+  height: 48px;
 }
 
 .login-gate__title {
