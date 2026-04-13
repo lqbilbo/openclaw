@@ -4,7 +4,7 @@ import type { IconName } from "./icons.js";
 export const TAB_GROUPS = [
   { label: "chat", tabs: ["chat"] },
   { label: "agent", tabs: ["skills"] },
-  { label: "settings", tabs: ["aiAgents"] },
+  { label: "settings", tabs: ["aiAgents", "appearance"] },
 ] as const;
 
 export type Tab =

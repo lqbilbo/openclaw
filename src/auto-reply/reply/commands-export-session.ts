@@ -40,6 +40,7 @@ function generateHtml(sessionData: SessionData): string {
   const themeVars = `
     --cyan: #00d7ff;
     --blue: #5f87ff;
+    --blue-4:	#93c5fd;
     --green: #b5bd68;
     --red: #cc6666;
     --yellow: #ffff00;

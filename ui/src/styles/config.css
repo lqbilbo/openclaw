@@ -22,6 +22,7 @@
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -222,6 +223,7 @@
     opacity: 0;
     transform: scale(0.9);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -688,6 +690,7 @@
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -769,18 +772,23 @@
 .config-form--modern .config-section-card:nth-child(1) {
   animation-delay: 0ms;
 }
+
 .config-form--modern .config-section-card:nth-child(2) {
   animation-delay: 40ms;
 }
+
 .config-form--modern .config-section-card:nth-child(3) {
   animation-delay: 80ms;
 }
+
 .config-form--modern .config-section-card:nth-child(4) {
   animation-delay: 120ms;
 }
+
 .config-form--modern .config-section-card:nth-child(5) {
   animation-delay: 160ms;
 }
+
 .config-form--modern .config-section-card:nth-child(n + 6) {
   animation-delay: 200ms;
 }
@@ -1204,17 +1212,17 @@
     background var(--duration-normal) ease;
 }
 
-.cfg-toggle input:checked + .cfg-toggle__track {
+.cfg-toggle input:checked+.cfg-toggle__track {
   background: var(--ok-subtle);
   border-color: rgba(34, 197, 94, 0.4);
 }
 
-.cfg-toggle input:checked + .cfg-toggle__track::after {
+.cfg-toggle input:checked+.cfg-toggle__track::after {
   transform: translateX(18px);
   background: var(--ok);
 }
 
-.cfg-toggle input:focus + .cfg-toggle__track {
+.cfg-toggle input:focus+.cfg-toggle__track {
   box-shadow: var(--focus-ring);
 }
 
@@ -1551,7 +1559,7 @@
   min-width: 0;
 }
 
-.cfg-map__item-value > .cfg-fields {
+.cfg-map__item-value>.cfg-fields {
   gap: 10px;
 }
 

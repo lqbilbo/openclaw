@@ -22,6 +22,10 @@ type ImageBlock = {
   alt?: string;
 };
 
+type AudioClip = {
+  url: string;
+};
+
 function extractImages(message: unknown): ImageBlock[] {
   const m = message as Record<string, unknown>;
   const content = m.content;
@@ -57,6 +61,32 @@ function extractImages(message: unknown): ImageBlock[] {
   }
 
   return images;
+}
+
+function extractAudioClips(message: unknown): AudioClip[] {
+  const m = message as Record<string, unknown>;
+  const content = m.content;
+  const clips: AudioClip[] = [];
+  if (!Array.isArray(content)) {
+    return clips;
+  }
+  for (const block of content) {
+    if (typeof block !== "object" || block === null) {
+      continue;
+    }
+    const b = block as Record<string, unknown>;
+    if (b.type !== "audio") {
+      continue;
+    }
+    const source = b.source as Record<string, unknown> | undefined;
+    if (source?.type === "base64" && typeof source.data === "string") {
+      const data = source.data;
+      const mediaType = (source.media_type as string) || "audio/mpeg";
+      const url = data.startsWith("data:") ? data : `data:${mediaType};base64,${data}`;
+      clips.push({ url });
+    }
+  }
+  return clips;
 }
 
 export function renderReadingIndicatorGroup(assistant?: AssistantIdentity, basePath?: string) {
@@ -114,6 +144,7 @@ export function renderMessageGroup(
   opts: {
     onOpenSidebar?: (content: string) => void;
     showReasoning: boolean;
+    showToolCalls?: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
     basePath?: string;
@@ -165,6 +196,7 @@ export function renderMessageGroup(
             {
               isStreaming: group.isStreaming && index === group.messages.length - 1,
               showReasoning: opts.showReasoning,
+              showToolCalls: opts.showToolCalls ?? true,
             },
             opts.onOpenSidebar,
           ),
@@ -613,7 +645,7 @@ function jsonSummaryLabel(parsed: unknown): string {
 
 function renderGroupedMessage(
   message: unknown,
-  opts: { isStreaming: boolean; showReasoning: boolean },
+  opts: { isStreaming: boolean; showReasoning: boolean; showToolCalls?: boolean },
   onOpenSidebar?: (content: string) => void,
 ) {
   const m = message as Record<string, unknown>;
@@ -626,10 +658,12 @@ function renderGroupedMessage(
     typeof m.toolCallId === "string" ||
     typeof m.tool_call_id === "string";
 
-  const toolCards = extractToolCards(message);
+  const toolCards = (opts.showToolCalls ?? true) ? extractToolCards(message) : [];
   const hasToolCards = toolCards.length > 0;
   const images = extractImages(message);
   const hasImages = images.length > 0;
+  const audioClips = extractAudioClips(message);
+  const hasAudio = audioClips.length > 0;
 
   const extractedText = extractTextCached(message);
   const extractedThinking =
@@ -650,7 +684,9 @@ function renderGroupedMessage(
     return renderCollapsedToolCards(toolCards, onOpenSidebar);
   }
 
-  if (!markdown && !hasToolCards && !hasImages) {
+  // Suppress empty bubbles when tool cards are the only content and toggle is off
+  const visibleToolCards = hasToolCards && (opts.showToolCalls ?? true);
+  if (!markdown && !visibleToolCards && !hasImages && !hasAudio) {
     return nothing;
   }
 
