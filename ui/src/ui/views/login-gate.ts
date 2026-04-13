@@ -16,7 +16,7 @@ export function renderLoginGate(state: AppViewState) {
       <div class="login-gate__card">
         <div class="login-gate__header">
           <img class="login-gate__logo" src=${faviconSrc} alt="OpenAgent" />
-          <div class="login-gate__title">OpenAgent管理平台</div>
+          <div class="login-gate__title">OpenAgent</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">

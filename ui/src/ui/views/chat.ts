@@ -1140,36 +1140,10 @@ export function renderChat(props: ChatProps) {
       ${renderSearchBar(requestUpdate)} ${renderPinnedSection(props, pinned, requestUpdate)}
 
       <div class="chat-top-panel">
-        <div class="chat-top-panel__tabs">
-          <button
-            class="chat-top-panel__tab ${vs.topPanelTab === 1 ? "chat-top-panel__tab--active" : ""}"
-            @click=${() => {
-              vs.topPanelTab = 1;
-              requestUpdate();
-            }}
-          >
-            任务执行图
-          </button>
-          <button
-            class="chat-top-panel__tab ${vs.topPanelTab !== 1 ? "chat-top-panel__tab--active" : ""}"
-            @click=${() => {
-              vs.topPanelTab = 2;
-              requestUpdate();
-            }}
-          >
-            任务轨迹
-          </button>
-        </div>
         <iframe
           class="chat-top-panel__frame"
-          src="http://localhost:3000/task-graph"
+          src="http://localhost:15373/list"
           style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
-          sandbox="allow-scripts allow-same-origin allow-forms"
-        ></iframe>
-        <iframe
-          class="chat-top-panel__frame"
-          src="http://localhost:3000/task-trace"
-          style="display:${vs.topPanelTab === 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
       </div>

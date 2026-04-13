@@ -489,11 +489,11 @@
 }
 
 .chat-send-btn--stop {
-  background: var(--danger);
+  background: var(--accent);
 }
 
 .chat-send-btn--stop:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 85%, #fff);
+  background: color-mix(in srgb, var(--accent-hover) 85%, #fff);
 }
 
 .slash-menu {
@@ -883,6 +883,7 @@
 .chat--welcome .agent-chat__input {
   position: static;
 }
+
 .chat-thread-inner {
   display: flex;
   flex-direction: column;
