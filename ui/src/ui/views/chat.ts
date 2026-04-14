@@ -159,6 +159,7 @@ interface ChatEphemeralState {
   searchQuery: string;
   pinnedExpanded: boolean;
   topPanelTab: number;
+  topPanelFullscreen: boolean;
 }
 
 function createChatEphemeralState(): ChatEphemeralState {
@@ -175,6 +176,7 @@ function createChatEphemeralState(): ChatEphemeralState {
     searchQuery: "",
     pinnedExpanded: false,
     topPanelTab: 1,
+    topPanelFullscreen: false,
   };
 }
 
@@ -1151,7 +1153,15 @@ export function renderChat(props: ChatProps) {
       }
       ${renderSearchBar(requestUpdate)} ${renderPinnedSection(props, pinned, requestUpdate)}
 
-      <div class="chat-top-panel">
+      <div class="chat-top-panel ${vs.topPanelFullscreen ? "chat-top-panel--fullscreen" : ""}">
+        <button
+          class="chat-top-panel__fullscreen-btn"
+          title=${vs.topPanelFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          @click=${() => {
+            vs.topPanelFullscreen = !vs.topPanelFullscreen;
+            requestUpdate();
+          }}
+        >${vs.topPanelFullscreen ? icons.minimize : icons.maximize}</button>
         <iframe
           class="chat-top-panel__frame"
           src="http://10.1.111.12:15373/list"

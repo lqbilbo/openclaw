@@ -832,6 +832,7 @@
   flex-direction: column;
   height: 45%;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
 
 .chat-top-panel__tabs {
@@ -862,6 +863,39 @@
   flex: 1;
   width: 100%;
   border: none;
+}
+
+.chat-top-panel__fullscreen-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 10;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+}
+
+.chat-top-panel__fullscreen-btn:hover {
+  opacity: 1;
+}
+
+.chat-top-panel__fullscreen-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+}
+
+.chat-top-panel--fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  height: 100% !important;
+  z-index: 1000;
 }
 
 /* Welcome state (new session) */
