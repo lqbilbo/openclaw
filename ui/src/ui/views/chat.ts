@@ -1164,7 +1164,7 @@ export function renderChat(props: ChatProps) {
         >${vs.topPanelFullscreen ? icons.minimize : icons.maximize}</button>
         <iframe
           class="chat-top-panel__frame"
-          src="http://10.1.111.12:15373/list"
+          src="http://10.1.111.12:15374/list"
           style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
