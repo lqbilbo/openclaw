@@ -18,6 +18,18 @@
     grid-template-rows: var(--shell-topbar-height) 0 minmax(0, 1fr);
   }
 
+  .shell--chat {
+    grid-template-columns: var(--shell-nav-width) 220px minmax(0, 1fr);
+    grid-template-rows: var(--shell-topbar-height) 1fr;
+    grid-template-areas:
+      "topbar topbar topbar"
+      "nav fstree content";
+  }
+
+  .shell--chat .fs-tree-panel {
+    display: flex;
+  }
+
   .shell-nav,
   .shell--nav-collapsed .shell-nav {
     width: auto;

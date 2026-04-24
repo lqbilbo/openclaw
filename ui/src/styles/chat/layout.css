@@ -880,6 +880,39 @@
   opacity: 0.6;
 }
 
+.chat-top-panel__toggle-btn {
+  align-self: flex-end;
+  margin: 4px 8px 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.chat-top-panel__toggle-btn:hover {
+  opacity: 1;
+  filter: brightness(1.1);
+}
+
+.chat-top-panel__toggle-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-split-container--panel-hidden {
+  flex: 0 1 auto;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
 .chat-top-panel__fullscreen-btn:hover {
   opacity: 1;
 }

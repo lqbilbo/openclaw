@@ -358,6 +358,7 @@ export function handleControlUiHttpRequest(
       assistantAvatar: avatarValue ?? identity.avatar,
       assistantAgentId: identity.agentId,
       serverVersion: resolveRuntimeServiceVersion(process.env),
+      topPanelSrc: process.env.OPENCLAW_TOP_PANEL_SRC || undefined,
     } satisfies ControlUiBootstrapConfig);
     return true;
   }

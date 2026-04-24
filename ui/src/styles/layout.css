@@ -983,12 +983,18 @@
   .shell {
     --shell-pad: 12px;
     --shell-gap: 12px;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+  }
+
+  .shell--chat {
+    grid-template-columns: var(--shell-nav-width) 220px minmax(0, 1fr);
+    grid-template-rows: var(--shell-topbar-height) 1fr;
     grid-template-areas:
-      "topbar"
-      "nav"
-      "content";
+      "topbar topbar topbar"
+      "nav fstree content";
+  }
+
+  .shell--chat .fs-tree-panel {
+    display: flex;
   }
 
   .nav-group {

@@ -1373,6 +1373,7 @@ export function renderApp(state: AppViewState) {
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
                 basePath: state.basePath ?? "",
+                topPanelSrc: (state as unknown as { topPanelSrc: string | null }).topPanelSrc,
                 systemInfo: (state as unknown as { systemInfo: unknown })
                   .systemInfo as ChatProps["systemInfo"],
               })

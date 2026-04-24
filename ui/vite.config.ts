@@ -51,6 +51,7 @@ export default defineConfig(() => {
                 assistantName: "",
                 assistantAvatar: "",
                 assistantAgentId: "",
+                topPanelSrc: process.env.OPENCLAW_TOP_PANEL_SRC || "",
               }),
             );
           });

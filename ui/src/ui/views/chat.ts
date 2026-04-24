@@ -116,6 +116,7 @@ export type ChatProps = {
     freeMemory: number;
     disk: { total: number; free: number } | null;
   } | null;
+  topPanelSrc: string | null;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -160,6 +161,7 @@ interface ChatEphemeralState {
   pinnedExpanded: boolean;
   topPanelTab: number;
   topPanelFullscreen: boolean;
+  topPanelHidden: boolean;
 }
 
 function createChatEphemeralState(): ChatEphemeralState {
@@ -177,6 +179,7 @@ function createChatEphemeralState(): ChatEphemeralState {
     pinnedExpanded: false,
     topPanelTab: 1,
     topPanelFullscreen: false,
+    topPanelHidden: false,
   };
 }
 
@@ -1153,7 +1156,16 @@ export function renderChat(props: ChatProps) {
       }
       ${renderSearchBar(requestUpdate)} ${renderPinnedSection(props, pinned, requestUpdate)}
 
-      <div class="chat-top-panel ${vs.topPanelFullscreen ? "chat-top-panel--fullscreen" : ""}">
+      <button
+          class="chat-top-panel__toggle-btn"
+          title=${vs.topPanelHidden ? "Show panel" : "Hide panel"}
+          @click=${() => {
+            vs.topPanelHidden = !vs.topPanelHidden;
+            requestUpdate();
+          }}
+        >${vs.topPanelHidden ? icons.chevronDown : html`<span style="display:inline-flex;transform:rotate(180deg)">${icons.chevronDown}</span>`}</button>
+
+      <div class="chat-top-panel ${vs.topPanelFullscreen ? "chat-top-panel--fullscreen" : ""}" style="display:${vs.topPanelHidden ? "none" : ""}">
         <button
           class="chat-top-panel__fullscreen-btn"
           title=${vs.topPanelFullscreen ? "Exit fullscreen" : "Fullscreen"}
@@ -1164,13 +1176,13 @@ export function renderChat(props: ChatProps) {
         >${vs.topPanelFullscreen ? icons.minimize : icons.maximize}</button>
         <iframe
           class="chat-top-panel__frame"
-          src="http://10.1.111.12:15374/list"
+          src=${props.topPanelSrc}
           style="display:${vs.topPanelTab !== 1 ? "none" : "block"}"
           sandbox="allow-scripts allow-same-origin allow-forms"
         ></iframe>
       </div>
 
-      <div class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}">
+      <div class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""} ${vs.topPanelHidden ? "chat-split-container--panel-hidden" : ""}">
         <div
           class="chat-main"
           style="flex: ${sidebarOpen ? `0 0 ${splitRatio * 100}%` : "1 1 100%"}"
@@ -1213,14 +1225,10 @@ export function renderChat(props: ChatProps) {
           ${
             props.showNewMessages
               ? html`
-                <button
-                  class="agent-chat__scroll-pill"
-                  type="button"
-                  @click=${props.onScrollToBottom}
-                >
-                  ${icons.arrowDown} New messages
-                </button>
-              `
+            <button class="chat-new-messages" type="button" @click=${props.onScrollToBottom}>
+              ${icons.arrowDown} New messages
+            </button>
+          `
               : nothing
           }
 
