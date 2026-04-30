@@ -568,10 +568,16 @@ function renderSessionsCard(
     }
     return raw;
   };
-  const copySessionName = async (s: UsageSessionEntry) => {
+  const copySessionName = (s: UsageSessionEntry) => {
     const text = formatSessionListLabel(s);
     try {
-      await navigator.clipboard.writeText(text);
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     } catch {
       // Best effort; clipboard can fail on insecure contexts or denied permission.
     }
@@ -670,7 +676,7 @@ function renderSessionsCard(
             title="Copy session name"
             @click=${(e: MouseEvent) => {
               e.stopPropagation();
-              void copySessionName(s);
+              copySessionName(s);
             }}
           >
             Copy

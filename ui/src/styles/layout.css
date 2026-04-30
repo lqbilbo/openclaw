@@ -835,7 +835,8 @@
 .content {
   grid-area: content;
   padding: 0 20px 32px;
-  display: block;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1111,13 +1112,12 @@
 }
 
 .fs-tree-panel__upload {
-  background: none;
-  border: none;
   cursor: pointer;
   padding: 2px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
+  user-select: none;
 }
 
 .fs-tree-panel__upload:hover {
@@ -1129,7 +1129,13 @@
   height: 14px;
 }
 
-.fs-tree-panel__upload:disabled {
+.fs-tree-panel__upload-label {
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fs-tree-panel__upload[aria-disabled="true"] {
   opacity: 0.4;
   cursor: not-allowed;
 }

@@ -867,7 +867,7 @@
 
 .chat-top-panel__fullscreen-btn {
   position: absolute;
-  top: 6px;
+  top: 16px;
   right: 8px;
   z-index: 10;
   background: var(--bg-2);

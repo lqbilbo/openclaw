@@ -1873,7 +1873,13 @@ export function renderFsTreePanel(state: AppViewState) {
                 title="Copy path"
                 @click=${(e: Event) => {
                   e.stopPropagation();
-                  void navigator.clipboard.writeText(item.path);
+                  const ta = document.createElement("textarea");
+                  ta.value = item.path;
+                  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand("copy");
+                  document.body.removeChild(ta);
                 }}
               >
                 ${icons.copy}
@@ -1913,16 +1919,29 @@ export function renderFsTreePanel(state: AppViewState) {
           }}
         />
         <div style="display:flex;gap:2px">
-          <button
+          <div
             class="fs-tree-panel__upload"
             title="Upload file"
-            ?disabled=${!state.connected}
+            role="button"
+            tabindex=${state.connected ? "0" : "-1"}
+            aria-disabled=${!state.connected}
             @click=${() => {
-              (document.querySelector(".fs-tree-panel__upload-input") as HTMLInputElement)?.click();
+              if (state.connected) {
+                (
+                  document.querySelector(".fs-tree-panel__upload-input") as HTMLInputElement
+                )?.click();
+              }
+            }}
+            @keydown=${(e: KeyboardEvent) => {
+              if (state.connected && (e.key === "Enter" || e.key === " ")) {
+                (
+                  document.querySelector(".fs-tree-panel__upload-input") as HTMLInputElement
+                )?.click();
+              }
             }}
           >
-            ${icons.upload}
-          </button>
+            <span class="fs-tree-panel__upload-label">上传</span>
+          </div>
           <!--<button
             class="fs-tree-panel__refresh"
             title="Refresh"

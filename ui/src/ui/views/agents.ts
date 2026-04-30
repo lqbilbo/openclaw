@@ -172,7 +172,13 @@ export function renderAgents(props: AgentsProps) {
                             ? html`
                                 <div class="agent-actions-menu">
                                   <button type="button" @click=${() => {
-                                    void navigator.clipboard.writeText(selectedAgent.id);
+                                    const ta = document.createElement("textarea");
+                                    ta.value = selectedAgent.id;
+                                    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+                                    document.body.appendChild(ta);
+                                    ta.select();
+                                    document.execCommand("copy");
+                                    document.body.removeChild(ta);
                                     actionsMenuOpen = false;
                                   }}>Copy agent ID</button>
                                   <button

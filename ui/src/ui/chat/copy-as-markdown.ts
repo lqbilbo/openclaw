@@ -12,17 +12,19 @@ type CopyButtonOptions = {
   label?: string;
 };
 
-async function copyTextToClipboard(text: string): Promise<boolean> {
+function copyTextToClipboard(text: string): boolean {
   if (!text) {
     return false;
   }
 
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  return ok;
 }
 
 function setButtonLabel(button: HTMLButtonElement, label: string) {
@@ -38,7 +40,7 @@ function createCopyButton(options: CopyButtonOptions): TemplateResult {
       type="button"
       title=${idleLabel}
       aria-label=${idleLabel}
-      @click=${async (e: Event) => {
+      @click=${(e: Event) => {
         const btn = e.currentTarget as HTMLButtonElement | null;
 
         if (!btn || btn.dataset.copying === "1") {
@@ -49,7 +51,7 @@ function createCopyButton(options: CopyButtonOptions): TemplateResult {
         btn.setAttribute("aria-busy", "true");
         btn.disabled = true;
 
-        const copied = await copyTextToClipboard(options.text());
+        const copied = copyTextToClipboard(options.text());
         if (!btn.isConnected) {
           return;
         }

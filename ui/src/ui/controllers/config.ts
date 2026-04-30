@@ -274,7 +274,13 @@ export async function openConfigFile(state: ConfigState): Promise<void> {
     const path = state.configSnapshot?.path;
     if (path) {
       try {
-        await navigator.clipboard.writeText(path);
+        const ta = document.createElement("textarea");
+        ta.value = path;
+        ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
       } catch {
         // ignore
       }

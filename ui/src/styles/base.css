@@ -1,11 +1,14 @@
 :root {
   /* 北电数智dashboard设计规范 V2.5 - 浅色模式配色系统 */
 
-  /* 字体系统 */
-  --mono:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
-  --font-body: "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  --font-display: var(--font-body);
+  /* 字体系统 - §3.1 */
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", Arial, sans-serif;
+  --font-data-display: "Roboto", Arial, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Roboto Mono", "Inconsolata", ui-monospace, monospace;
+  /* legacy aliases */
+  --mono: var(--font-mono);
+  --font-body: var(--font-ui);
+  --font-display: var(--font-ui);
 
   /* 导航胶囊 */
   --nav-pill-active-bg: #2775ff;
@@ -151,6 +154,9 @@
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.08);
   --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.1);
   --shadow-glow: 0 0 20px var(--accent-glow);
+  /* §2.4 spec shadows */
+  --shadow-panel: 0 24px 56px rgba(40, 72, 120, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --metric-shadow: 0 16px 32px rgba(59, 90, 138, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.78);
 
   /* Radii */
   --radius-sm: 6px;
@@ -257,6 +263,9 @@
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.08);
   --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.1);
   --shadow-glow: 0 0 20px var(--accent-glow);
+  /* §2.4 spec shadows */
+  --shadow-panel: 0 24px 56px rgba(40, 72, 120, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --metric-shadow: 0 16px 32px rgba(59, 90, 138, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.78);
 
   color-scheme: light;
 }
@@ -462,6 +471,129 @@
   --chart-series-6: #E8B7BD;
 
   color-scheme: light;
+}
+
+/* ===========================================
+   Dark Theme Tokens - §2.5 北电数智 V2.0
+   =========================================== */
+:root[data-theme-mode="dark"] {
+  /* 文字色 */
+  --text-primary: #f3f7ff;
+  --text-secondary: #c5d3ef;
+  --text-muted: #7386af;
+  --accent: #79aaff;
+  --accent-hover: #93bbff;
+  --accent-muted: #79aaff;
+  --accent-subtle: rgba(121, 170, 255, 0.12);
+  --accent-foreground: #ffffff;
+  --accent-glow: rgba(121, 170, 255, 0.22);
+  --primary: #79aaff;
+  --primary-foreground: #0a1530;
+  --ring: #79aaff;
+
+  /* 背景色 */
+  --bg-app: #050d18;
+  --bg-card: rgba(22, 42, 78, 1);
+  --bg-card-soft: rgba(20, 38, 72, 1);
+  --bg-chip: rgba(34, 56, 100, 0.52);
+  --page-bg-start: #0a1530;
+  --page-bg-mid: #050b15;
+  --page-bg-end: #040912;
+  --panel-surface: rgba(18, 35, 65, 1);
+
+  /* 兼容映射 */
+  --bg: var(--bg-app);
+  --bg-accent: var(--bg-card);
+  --bg-elevated: var(--bg-card);
+  --bg-hover: var(--bg-card-soft);
+  --bg-muted: var(--bg-card-soft);
+  --bg-content: var(--bg-card-soft);
+  --card: var(--bg-card);
+  --card-foreground: var(--text-primary);
+  --card-highlight: rgba(255, 255, 255, 0.02);
+  --popover: var(--bg-card);
+  --popover-foreground: var(--text-primary);
+  --panel: var(--bg-app);
+  --panel-strong: var(--bg-card);
+  --panel-hover: var(--bg-card-soft);
+  --chrome: rgba(10, 21, 48, 0.96);
+  --chrome-strong: rgba(10, 21, 48, 0.98);
+  --text: var(--text-primary);
+  --text-strong: var(--text-primary);
+  --chat-text: var(--text-primary);
+  --muted: var(--text-muted);
+  --muted-strong: var(--text-secondary);
+  --muted-foreground: var(--text-muted);
+  --secondary: var(--bg-card);
+  --secondary-foreground: var(--text-primary);
+
+  /* 边框色 */
+  --line: rgba(100, 147, 255, 0.18);
+  --line-strong: rgba(121, 169, 255, 0.34);
+  --border: rgba(100, 147, 255, 0.18);
+  --border-strong: rgba(121, 169, 255, 0.34);
+  --border-hover: rgba(121, 169, 255, 0.28);
+  --button-border: rgba(112, 149, 235, 0.16);
+  --subcard-border: rgba(112, 148, 233, 0.12);
+  --input: rgba(100, 147, 255, 0.18);
+
+  /* 阴影 - §2.5 */
+  --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --metric-shadow: 0 18px 36px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px var(--accent-glow);
+
+  /* 图表相关 */
+  --chart-shell-bg: rgba(15, 28, 55, 0.98);
+  --chart-shell-border: rgba(111, 151, 239, 0.12);
+  --chart-grid: rgba(112, 149, 233, 0.08);
+  --track-bg: rgba(255, 255, 255, 0.06);
+  --gauge-track: rgba(74, 98, 145, 0.36);
+  --chart-area-start: rgba(149, 201, 255, 0.56);
+  --chart-area-end: rgba(66, 98, 173, 0.08);
+  --chart-line-start: #66a8ff;
+  --chart-line-end: #a8f1ff;
+  --chart-point-fill: #d3f5ff;
+  --chart-point-stroke: #7db7ff;
+
+  /* 图表色板 - §2.6 深色模式 */
+  --chart-series-1: #79aaff;
+  --chart-series-2: #5fd7bc;
+  --chart-series-3: #60d8ff;
+  --chart-series-4: #ffd06a;
+  --chart-series-5: #d2a8ff;
+  --chart-series-6: #ff7a82;
+  --chart-series-7: #8d96ff;
+  --chart-series-8: #7ce7a2;
+  --chart-series-9: #ff9f5f;
+  --chart-series-10: #ff8ec7;
+
+  /* 语义色 */
+  --ok: #4be38e;
+  --ok-muted: rgba(75, 227, 142, 0.75);
+  --ok-subtle: rgba(75, 227, 142, 0.08);
+  --destructive: #ff7a82;
+  --destructive-foreground: #fafafa;
+  --warn: #ffbf5b;
+  --warn-muted: rgba(255, 191, 91, 0.75);
+  --warn-subtle: rgba(255, 191, 91, 0.08);
+  --danger: #ff7a82;
+  --danger-muted: rgba(255, 122, 130, 0.75);
+  --danger-subtle: rgba(255, 122, 130, 0.08);
+  --info: #79aaff;
+
+  --focus: rgba(121, 170, 255, 0.15);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+  --focus-glow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ring), 0 0 12px var(--accent-glow);
+  --grid-line: rgba(255, 255, 255, 0.04);
+
+  /* 滚动条 */
+  scrollbar-color: rgba(100, 147, 255, 0.25) transparent;
+
+  color-scheme: dark;
 }
 
 * {
