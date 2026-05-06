@@ -3,6 +3,7 @@ import { t } from "../../i18n/index.ts";
 import { renderThemeToggle } from "../app-render.helpers.ts";
 import type { AppViewState } from "../app-view-state.ts";
 import { icons } from "../icons.ts";
+import { persistSessionPassword } from "../storage.ts";
 // import { normalizeBasePath } from "../navigation.ts";
 // import { agentLogoUrl } from "./agents-utils.ts";
 
@@ -19,7 +20,7 @@ export function renderLoginGate(state: AppViewState) {
             <img class="left" src="/beidianshuzhi.png" alt="北电数智" />
             <img class="right" src="/guangzhoushiyanshi.png" alt="广州实验室" />
           </div>
-          <div class="login-gate__title">OpenAgent</div>
+          <div class="login-gate__title">钟山科研智能体</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>
         </div>
         <div class="login-gate__form">
@@ -33,7 +34,7 @@ export function renderLoginGate(state: AppViewState) {
               }}
               placeholder="ws://127.0.0.1:18789"
             />
-          </label>-->
+          </label>
           <label class="field">
             <span>${t("overview.access.token")}</span>
             <div class="login-gate__secret-row">
@@ -66,7 +67,7 @@ export function renderLoginGate(state: AppViewState) {
                 ${state.loginShowGatewayToken ? icons.eye : icons.eyeOff}
               </button>
             </div>
-          </label>
+          </label>-->
           <label class="field">
             <span>${t("overview.access.password")}</span>
             <div class="login-gate__secret-row">
@@ -78,6 +79,7 @@ export function renderLoginGate(state: AppViewState) {
                 @input=${(e: Event) => {
                   const v = (e.target as HTMLInputElement).value;
                   state.password = v;
+                  persistSessionPassword(state.settings.gatewayUrl, v);
                 }}
                 placeholder="${t("login.passwordPlaceholder")}"
                 @keydown=${(e: KeyboardEvent) => {
@@ -89,7 +91,7 @@ export function renderLoginGate(state: AppViewState) {
               <button
                 type="button"
                 class="btn btn--icon ${state.loginShowGatewayPassword ? "active" : ""}"
-                title=${state.loginShowGatewayPassword ? "Hide password" : "Show password"}
+                title=${state.loginShowGatewayPassword ? "隐藏密码" : "显示密码"}
                 aria-label="Toggle password visibility"
                 aria-pressed=${state.loginShowGatewayPassword}
                 @click=${() => {
@@ -101,7 +103,7 @@ export function renderLoginGate(state: AppViewState) {
             </div>
           </label>
           <button class="btn primary login-gate__connect" @click=${() => state.connect()}>
-            ${t("common.connect")}
+            登录
           </button>
         </div>
         ${

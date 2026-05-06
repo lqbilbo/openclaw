@@ -70,7 +70,7 @@ export const zh_CN: TranslationMap = {
       subtitle: "仪表板连接的位置及其身份验证方式。",
       wsUrl: "WebSocket URL",
       token: "网关令牌",
-      password: "密码 (不存储)",
+      password: "登录密码",
       sessionKey: "默认会话密钥",
       language: "语言",
       connectHint: "点击连接以应用连接更改。",
@@ -152,7 +152,7 @@ export const zh_CN: TranslationMap = {
   },
   login: {
     subtitle: "",
-    passwordPlaceholder: "可选",
+    passwordPlaceholder: "必填",
   },
   chat: {
     disconnected: "已断开与网关的连接。",

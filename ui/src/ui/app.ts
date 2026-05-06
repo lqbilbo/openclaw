@@ -65,7 +65,7 @@ import {
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
-import { loadSettings, type UiSettings } from "./storage.ts";
+import { loadSettings, type UiSettings, loadSessionPassword } from "./storage.ts";
 import { VALID_THEME_NAMES, type ResolvedTheme, type ThemeMode, type ThemeName } from "./theme.ts";
 import type {
   AgentsListResult,
@@ -125,7 +125,7 @@ export class OpenClawApp extends LitElement {
       void i18n.setLocale(this.settings.locale);
     }
   }
-  @state() password = "";
+  @state() password = loadSessionPassword(this.settings.gatewayUrl);
   @state() loginShowGatewayToken = false;
   @state() loginShowGatewayPassword = false;
   @state() tab: Tab = "chat";

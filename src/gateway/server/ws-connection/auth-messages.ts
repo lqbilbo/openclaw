@@ -33,9 +33,9 @@ export function formatGatewayAuthFailureMessage(params: {
     case "token_missing_config":
       return "unauthorized: gateway token not configured on gateway (set gateway.auth.token)";
     case "password_missing":
-      return `unauthorized: gateway password missing (${passwordHint})`;
+      return `请填入登录密码`;
     case "password_mismatch":
-      return `unauthorized: gateway password mismatch (${passwordHint})`;
+      return `登录密码不匹配`;
     case "password_missing_config":
       return "unauthorized: gateway password not configured on gateway (set gateway.auth.password)";
     case "bootstrap_token_invalid":

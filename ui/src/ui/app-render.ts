@@ -76,8 +76,9 @@ import {
   updateSkillEnabled,
 } from "./controllers/skills.ts";
 import { icons } from "./icons.ts";
-import "./components/dashboard-header.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
+import "./components/dashboard-header.ts";
+import { persistSessionPassword } from "./storage.ts";
 import { agentLogoUrl } from "./views/agents-utils.ts";
 import {
   resolveAgentConfig,
@@ -453,9 +454,9 @@ export function renderApp(state: AppViewState) {
                     <img
                       class="sidebar-brand__logo"
                       src="${agentLogoUrl(basePath)}"
-                      alt="OpenAgent"
+                      alt="钟山科研智能体"
                     />
-                    <span class="sidebar-brand__title">OpenAgent</span>
+                    <span class="sidebar-brand__title">钟山科研智能体</span>
                   </div>
                 `
             }
@@ -514,7 +515,7 @@ export function renderApp(state: AppViewState) {
           </nav>
 
           <div class="sidebar-footer">
-            <img src="/beidianshuzhi.png" alt="" style="width:100%;display:block;" />
+            <img src="/BEDI_favicon.ico" alt="" style="width:100%;display:block;" />
           </div>
         </aside>
         ${
@@ -582,7 +583,10 @@ export function renderApp(state: AppViewState) {
                 showGatewayToken: state.overviewShowGatewayToken,
                 showGatewayPassword: state.overviewShowGatewayPassword,
                 onSettingsChange: (next) => state.applySettings(next),
-                onPasswordChange: (next) => (state.password = next),
+                onPasswordChange: (next) => {
+                  state.password = next;
+                  persistSessionPassword(state.settings.gatewayUrl, next);
+                },
                 onSessionKeyChange: (next) => {
                   state.sessionKey = next;
                   state.chatMessage = "";

@@ -1,6 +1,7 @@
 const KEY = "openclaw.control.settings.v1";
 const LEGACY_TOKEN_SESSION_KEY = "openclaw.control.token.v1";
 const TOKEN_SESSION_KEY_PREFIX = "openclaw.control.token.v1:";
+const PASSWORD_SESSION_KEY_PREFIX = "openclaw.control.password.v1:";
 
 type PersistedUiSettings = Omit<UiSettings, "token"> & { token?: never };
 
@@ -87,6 +88,10 @@ function tokenSessionKeyForGateway(gatewayUrl: string): string {
   return `${TOKEN_SESSION_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
 }
 
+function passwordSessionKeyForGateway(gatewayUrl: string): string {
+  return `${PASSWORD_SESSION_KEY_PREFIX}${normalizeGatewayTokenScope(gatewayUrl)}`;
+}
+
 function loadSessionToken(gatewayUrl: string): string {
   try {
     const storage = getSessionStorage();
@@ -110,6 +115,37 @@ function persistSessionToken(gatewayUrl: string, token: string) {
     storage.removeItem(LEGACY_TOKEN_SESSION_KEY);
     const key = tokenSessionKeyForGateway(gatewayUrl);
     const normalized = token.trim();
+    if (normalized) {
+      storage.setItem(key, normalized);
+      return;
+    }
+    storage.removeItem(key);
+  } catch {
+    // best-effort
+  }
+}
+
+export function loadSessionPassword(gatewayUrl: string): string {
+  try {
+    const storage = getSessionStorage();
+    if (!storage) {
+      return "";
+    }
+    const password = storage.getItem(passwordSessionKeyForGateway(gatewayUrl)) ?? "";
+    return password.trim();
+  } catch {
+    return "";
+  }
+}
+
+export function persistSessionPassword(gatewayUrl: string, password: string) {
+  try {
+    const storage = getSessionStorage();
+    if (!storage) {
+      return;
+    }
+    const key = passwordSessionKeyForGateway(gatewayUrl);
+    const normalized = password.trim();
     if (normalized) {
       storage.setItem(key, normalized);
       return;
