@@ -439,7 +439,7 @@ export class OpenClawApp extends LitElement {
   @state() logsAtBottom = true;
 
   @state() fsTreeLoading = false;
-  @state() fsTreeDir = "";
+  @state() fsTreeDir = "/Users/richardl/workspace";
   @state() fsTreeItems: import("./controllers/fs-tree.ts").FsEntry[] = [];
   @state() fsTreeError: string | null = null;
   @state() fsTreeExpanded: Record<string, import("./controllers/fs-tree.ts").FsEntry[]> = {};

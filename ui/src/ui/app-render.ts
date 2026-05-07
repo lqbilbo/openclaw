@@ -515,7 +515,7 @@ export function renderApp(state: AppViewState) {
           </nav>
 
           <div class="sidebar-footer">
-            <img src="/BEDI_favicon.ico" alt="" style="width:100%;display:block;" />
+            <img src="/beidianshuzhi.png" alt="" style="width:100%;display:block;" />
           </div>
         </aside>
         ${
@@ -1853,7 +1853,7 @@ export function renderFsTreePanel(state: AppViewState) {
   }
 
   // Load on first render
-  if (!fsTreeLoading && !fsTreeDir && !fsTreeError) {
+  if (!fsTreeLoading && fsTreeItems.length === 0 && !fsTreeError) {
     void state.handleLoadFsTree();
   }
 
@@ -1925,7 +1925,7 @@ export function renderFsTreePanel(state: AppViewState) {
         <div style="display:flex;gap:2px">
           <div
             class="fs-tree-panel__upload"
-            title="Upload file"
+            title="上传文件"
             role="button"
             tabindex=${state.connected ? "0" : "-1"}
             aria-disabled=${!state.connected}
@@ -1946,13 +1946,13 @@ export function renderFsTreePanel(state: AppViewState) {
           >
             <span class="fs-tree-panel__upload-label">上传</span>
           </div>
-          <!--<button
+          <button
             class="fs-tree-panel__refresh"
-            title="Refresh"
+            title="刷新"
             @click=${() => state.handleLoadFsTree(fsTreeDir || undefined)}
           >
-            ${icons.refresh}
-          </button>-->
+            <span>刷新</span>
+          </button>
         </div>
       </div>
       <div class="fs-tree-panel__body">

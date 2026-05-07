@@ -49,7 +49,7 @@
 }
 
 .login-gate__logo .right {
-  width: 138px;
+  width: 128px;
   height: 48px;
 }
 
@@ -3863,7 +3863,7 @@
   pointer-events: none;
 }
 
-.chart-shell > * {
+.chart-shell>* {
   position: relative;
   z-index: 1;
 }
@@ -3893,34 +3893,49 @@
   background: rgba(75, 227, 142, 0.14);
   color: var(--success, #4be38e);
 }
+
 .status-chip--running::before,
-.status-chip--success::before { background: var(--success, #4be38e); }
+.status-chip--success::before {
+  background: var(--success, #4be38e);
+}
 
 .status-chip--available {
   background: rgba(77, 124, 255, 0.14);
   color: var(--blue-1, #4d7cff);
 }
-.status-chip--available::before { background: var(--blue-1, #4d7cff); }
+
+.status-chip--available::before {
+  background: var(--blue-1, #4d7cff);
+}
 
 .status-chip--active {
   background: rgba(251, 146, 60, 0.14);
   color: #fb923c;
 }
-.status-chip--active::before { background: #fb923c; }
+
+.status-chip--active::before {
+  background: #fb923c;
+}
 
 .status-chip--warning {
   background: rgba(255, 191, 91, 0.14);
   color: var(--warning, #ffbf5b);
 }
-.status-chip--warning::before { background: var(--warning, #ffbf5b); }
+
+.status-chip--warning::before {
+  background: var(--warning, #ffbf5b);
+}
 
 .status-chip--error,
 .status-chip--danger {
   background: rgba(255, 122, 130, 0.14);
   color: var(--danger, #ff7a82);
 }
+
 .status-chip--error::before,
-.status-chip--danger::before { background: var(--danger, #ff7a82); }
+.status-chip--danger::before {
+  background: var(--danger, #ff7a82);
+}
 
 /* §5.5 Nav Pill */
 .nav-pill-container {
@@ -3948,7 +3963,7 @@
   border: none;
   cursor: pointer;
   transition: color var(--duration-fast) var(--ease-out),
-              background var(--duration-fast) var(--ease-out);
+    background var(--duration-fast) var(--ease-out);
 }
 
 .nav-pill-item:hover {

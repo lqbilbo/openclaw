@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_AGENT_WORKSPACE_DIR } from "../../agents/workspace.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
@@ -9,7 +8,7 @@ export const fsHandlers: GatewayRequestHandlers = {
     const dir =
       typeof params.dir === "string" && params.dir.trim()
         ? params.dir.trim()
-        : DEFAULT_AGENT_WORKSPACE_DIR;
+        : "/Users/richardl/workspace";
 
     let entries;
     try {
@@ -44,7 +43,7 @@ export const fsHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "invalid file name"));
       return;
     }
-    const dir = DEFAULT_AGENT_WORKSPACE_DIR;
+    const dir = "/Users/richardl/workspace";
     const filePath = path.join(dir, name);
     try {
       await fs.mkdir(dir, { recursive: true });

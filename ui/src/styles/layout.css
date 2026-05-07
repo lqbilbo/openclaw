@@ -1100,6 +1100,9 @@
   color: var(--text-muted);
   display: flex;
   align-items: center;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .fs-tree-panel__refresh:hover {
@@ -1188,6 +1191,15 @@
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.fs-tree__path {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fs-tree__chevron {

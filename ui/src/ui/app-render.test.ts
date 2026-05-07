@@ -38,9 +38,10 @@ describe("renderFsTreePanel", () => {
     expect(handleLoadFsTree).toHaveBeenCalledOnce();
   });
 
-  it("does not call handleLoadFsTree when dir is already set", () => {
+  it("does not call handleLoadFsTree when items already loaded", () => {
     const handleLoadFsTree = vi.fn();
-    renderToDiv(makeState({ fsTreeDir: "/workspace", handleLoadFsTree }));
+    const items: FsEntry[] = [{ name: "README.md", isDir: false, path: "/workspace/README.md" }];
+    renderToDiv(makeState({ fsTreeItems: items, handleLoadFsTree }));
     expect(handleLoadFsTree).not.toHaveBeenCalled();
   });
 
