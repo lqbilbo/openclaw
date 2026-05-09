@@ -46,11 +46,13 @@
 .login-gate__logo .left {
   width: 182px;
   height: 48px;
+  object-fit: contain;
 }
 
 .login-gate__logo .right {
   width: 128px;
   height: 48px;
+  object-fit: contain;
 }
 
 .login-gate__title {

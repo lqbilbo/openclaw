@@ -173,6 +173,12 @@ img.chat-avatar {
   object-position: center;
 }
 
+/* Logo avatar support - fit logo within avatar size */
+img.chat-avatar--logo {
+  object-fit: contain;
+  background: var(--panel-strong);
+}
+
 /* Minimal Bubble Design - dynamic width based on content */
 .chat-bubble {
   position: relative;
