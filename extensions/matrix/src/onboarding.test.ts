@@ -3,8 +3,10 @@ import { matrixOnboardingAdapter } from "./onboarding.js";
 import {
   createConfiguredMatrixDefaultAccountConfig,
   createConfiguredMatrixTopLevelConfig,
+  createMatrixEnvShortcutAddAccountPrompter,
   createMatrixNamedAccountsConfig,
   createLegacyMatrixTopLevelConfig,
+  installMatrixScopedEnvShortcut,
   createMatrixTokenAddAccountPrompter,
   createMatrixUpdateKeepCredentialsPrompter,
   installMatrixOnboardingEnvRestoreHooks,
@@ -25,23 +27,10 @@ describe("matrix onboarding", () => {
 
   it("offers env shortcut for non-default account when scoped env vars are present", async () => {
     installMatrixTestRuntime();
-
-    process.env.MATRIX_HOMESERVER = "https://matrix.env.example.org";
-    process.env.MATRIX_USER_ID = "@env:example.org";
-    process.env.MATRIX_PASSWORD = "env-password"; // pragma: allowlist secret
-    process.env.MATRIX_ACCESS_TOKEN = "";
-    process.env.MATRIX_OPS_HOMESERVER = "https://matrix.ops.env.example.org";
-    process.env.MATRIX_OPS_ACCESS_TOKEN = "ops-env-token";
+    installMatrixScopedEnvShortcut();
 
     const confirmMessages: string[] = [];
-    const prompter = createMatrixWizardPrompter({
-      select: {
-        "Matrix already configured. What do you want to do?": "add-account",
-        "Matrix auth method": "token",
-      },
-      text: {
-        "Matrix account name": "ops",
-      },
+    const prompter = createMatrixEnvShortcutAddAccountPrompter({
       onConfirm: (message) => {
         confirmMessages.push(message);
         return message.startsWith("Matrix env vars detected");
@@ -65,9 +54,7 @@ describe("matrix onboarding", () => {
           }
         | undefined;
       expect(result.accountId).toBe("ops");
-      expect(opsAccount).toMatchObject({
-        enabled: true,
-      });
+      expect(opsAccount?.enabled).toBe(true);
       expect(opsAccount?.homeserver).toBeUndefined();
       expect(opsAccount?.accessToken).toBeUndefined();
     }
@@ -82,24 +69,16 @@ describe("matrix onboarding", () => {
 
   it("routes env-shortcut add-account flow through Matrix invite auto-join setup", async () => {
     installMatrixTestRuntime();
-
-    process.env.MATRIX_HOMESERVER = "https://matrix.env.example.org";
-    process.env.MATRIX_USER_ID = "@env:example.org";
-    process.env.MATRIX_PASSWORD = "env-password"; // pragma: allowlist secret
-    process.env.MATRIX_ACCESS_TOKEN = "";
-    process.env.MATRIX_OPS_HOMESERVER = "https://matrix.ops.env.example.org";
-    process.env.MATRIX_OPS_ACCESS_TOKEN = "ops-env-token";
+    installMatrixScopedEnvShortcut();
 
     const notes: string[] = [];
-    const prompter = createMatrixWizardPrompter({
+    const prompter = createMatrixEnvShortcutAddAccountPrompter({
       notes,
       select: {
-        "Matrix already configured. What do you want to do?": "add-account",
         "Matrix rooms access": "allowlist",
         "Matrix invite auto-join": "allowlist",
       },
       text: {
-        "Matrix account name": "ops",
         "Matrix rooms allowlist (comma-separated)": "!ops-room:example.org",
         "Matrix invite auto-join allowlist (comma-separated)": "#ops-invites:example.org",
       },
@@ -123,15 +102,12 @@ describe("matrix onboarding", () => {
     }
 
     expect(result.accountId).toBe("ops");
-    expect(result.cfg.channels?.matrix?.accounts?.ops).toMatchObject({
-      enabled: true,
-      groupPolicy: "allowlist",
-      groups: {
-        "!ops-room:example.org": { enabled: true },
-      },
-      autoJoin: "allowlist",
-      autoJoinAllowlist: ["#ops-invites:example.org"],
-    });
+    const opsAccount = result.cfg.channels?.matrix?.accounts?.ops;
+    expect(opsAccount?.enabled).toBe(true);
+    expect(opsAccount?.groupPolicy).toBe("allowlist");
+    expect(opsAccount?.groups?.["!ops-room:example.org"]?.enabled).toBe(true);
+    expect(opsAccount?.autoJoin).toBe("allowlist");
+    expect(opsAccount?.autoJoinAllowlist).toEqual(["#ops-invites:example.org"]);
     expect(notes.join("\n")).toContain("WARNING: Matrix invite auto-join defaults to off.");
   });
 
@@ -155,17 +131,15 @@ describe("matrix onboarding", () => {
     expect(result.cfg.channels?.matrix?.homeserver).toBeUndefined();
     expect(result.cfg.channels?.matrix?.accessToken).toBeUndefined();
     expect(result.cfg.channels?.matrix?.avatarUrl).toBeUndefined();
-    expect(result.cfg.channels?.matrix?.accounts?.default).toMatchObject({
-      homeserver: "https://matrix.main.example.org",
-      userId: "@main:example.org",
-      accessToken: "main-token",
-      avatarUrl: "mxc://matrix.main.example.org/main-avatar",
-    });
-    expect(result.cfg.channels?.matrix?.accounts?.ops).toMatchObject({
-      name: "ops",
-      homeserver: "https://matrix.ops.example.org",
-      accessToken: "ops-token",
-    });
+    const defaultAccount = result.cfg.channels?.matrix?.accounts?.default;
+    expect(defaultAccount?.homeserver).toBe("https://matrix.main.example.org");
+    expect(defaultAccount?.userId).toBe("@main:example.org");
+    expect(defaultAccount?.accessToken).toBe("main-token");
+    expect(defaultAccount?.avatarUrl).toBe("mxc://matrix.main.example.org/main-avatar");
+    const opsAccount = result.cfg.channels?.matrix?.accounts?.ops;
+    expect(opsAccount?.name).toBe("ops");
+    expect(opsAccount?.homeserver).toBe("https://matrix.ops.example.org");
+    expect(opsAccount?.accessToken).toBe("ops-token");
   });
 
   it("reuses an existing raw default-like key during onboarding promotion when defaultAccount is unset", async () => {
@@ -202,24 +176,21 @@ describe("matrix onboarding", () => {
       return;
     }
 
-    expect(result.cfg.channels?.matrix?.accounts?.Default).toMatchObject({
-      enabled: true,
-      deviceName: "Legacy raw key",
-      homeserver: "https://matrix.main.example.org",
-      userId: "@main:example.org",
-      accessToken: "main-token",
-      avatarUrl: "mxc://matrix.main.example.org/main-avatar",
-    });
+    const defaultAccount = result.cfg.channels?.matrix?.accounts?.Default;
+    expect(defaultAccount?.enabled).toBe(true);
+    expect(defaultAccount?.deviceName).toBe("Legacy raw key");
+    expect(defaultAccount?.homeserver).toBe("https://matrix.main.example.org");
+    expect(defaultAccount?.userId).toBe("@main:example.org");
+    expect(defaultAccount?.accessToken).toBe("main-token");
+    expect(defaultAccount?.avatarUrl).toBe("mxc://matrix.main.example.org/main-avatar");
     expect(result.cfg.channels?.matrix?.accounts?.default).toBeUndefined();
-    expect(result.cfg.channels?.matrix?.accounts?.support).toMatchObject({
-      homeserver: "https://matrix.support.example.org",
-      accessToken: "support-token",
-    });
-    expect(result.cfg.channels?.matrix?.accounts?.ops).toMatchObject({
-      name: "ops",
-      homeserver: "https://matrix.ops.example.org",
-      accessToken: "ops-token",
-    });
+    const supportAccount = result.cfg.channels?.matrix?.accounts?.support;
+    expect(supportAccount?.homeserver).toBe("https://matrix.support.example.org");
+    expect(supportAccount?.accessToken).toBe("support-token");
+    const opsAccount = result.cfg.channels?.matrix?.accounts?.ops;
+    expect(opsAccount?.name).toBe("ops");
+    expect(opsAccount?.homeserver).toBe("https://matrix.ops.example.org");
+    expect(opsAccount?.accessToken).toBe("ops-token");
   });
 
   it("includes device env var names in auth help text", async () => {
@@ -278,13 +249,10 @@ describe("matrix onboarding", () => {
       return;
     }
 
-    expect(result.cfg.channels?.matrix).toMatchObject({
-      homeserver: "http://localhost.localdomain:8008",
-      network: {
-        dangerouslyAllowPrivateNetwork: true,
-      },
-      accessToken: "ops-token",
-    });
+    const matrixConfig = result.cfg.channels?.matrix;
+    expect(matrixConfig?.homeserver).toBe("http://localhost.localdomain:8008");
+    expect(matrixConfig?.network?.dangerouslyAllowPrivateNetwork).toBe(true);
+    expect(matrixConfig?.accessToken).toBe("ops-token");
   });
 
   it("preserves SecretRef access tokens when keeping existing credentials", async () => {
@@ -376,21 +344,16 @@ describe("matrix onboarding", () => {
     }
 
     expect(result.accountId).toBe("ops");
-    expect(result.cfg.channels?.["matrix"]?.accounts?.ops).toMatchObject({
-      homeserver: "https://matrix.ops.example.org",
-      accessToken: "ops-token",
-      deviceName: "Ops Gateway",
-      dm: {
-        policy: "allowlist",
-        allowFrom: ["@alice:example.org"],
-      },
-      groupPolicy: "allowlist",
-      autoJoin: "allowlist",
-      autoJoinAllowlist: ["#ops-invites:example.org"],
-      groups: {
-        "!ops-room:example.org": { enabled: true },
-      },
-    });
+    const opsAccount = result.cfg.channels?.["matrix"]?.accounts?.ops;
+    expect(opsAccount?.homeserver).toBe("https://matrix.ops.example.org");
+    expect(opsAccount?.accessToken).toBe("ops-token");
+    expect(opsAccount?.deviceName).toBe("Ops Gateway");
+    expect(opsAccount?.dm?.policy).toBe("allowlist");
+    expect(opsAccount?.dm?.allowFrom).toEqual(["@alice:example.org"]);
+    expect(opsAccount?.groupPolicy).toBe("allowlist");
+    expect(opsAccount?.autoJoin).toBe("allowlist");
+    expect(opsAccount?.autoJoinAllowlist).toEqual(["#ops-invites:example.org"]);
+    expect(opsAccount?.groups?.["!ops-room:example.org"]?.enabled).toBe(true);
     expect(result.cfg.channels?.["matrix"]?.dm).toBeUndefined();
     expect(result.cfg.channels?.["matrix"]?.groups).toBeUndefined();
     expect(notes.join("\n")).toContain("WARNING: Matrix invite auto-join defaults to off.");
@@ -466,9 +429,8 @@ describe("matrix onboarding", () => {
 
   it("reports account-scoped DM config keys for named accounts", () => {
     const resolveConfigKeys = matrixOnboardingAdapter.dmPolicy?.resolveConfigKeys;
-    expect(resolveConfigKeys).toBeDefined();
-    if (!resolveConfigKeys) {
-      return;
+    if (resolveConfigKeys === undefined) {
+      throw new Error("expected matrix DM policy config-key resolver");
     }
 
     expect(

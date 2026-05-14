@@ -51,6 +51,63 @@ function buildDeps(cfg: OpenClawConfig, _runtime?: PluginRuntime): MSTeamsMessag
   };
 }
 
+function createReactionTestHarness() {
+  const mockRuntime = buildMockRuntime();
+  setMSTeamsRuntime(mockRuntime);
+
+  const cfg: OpenClawConfig = {
+    channels: { msteams: { allowFrom: ["allowed-aad"] } },
+  } as OpenClawConfig;
+
+  const deps = buildDeps(cfg, mockRuntime);
+  const handler = createMSTeamsReactionHandler(deps);
+  const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
+
+  return { handler, enqueue };
+}
+
+function firstEnqueueCall(enqueue: ReturnType<typeof vi.fn>): unknown[] {
+  const [call] = enqueue.mock.calls;
+  if (!call) {
+    throw new Error("Expected enqueueSystemEvent call");
+  }
+  return call;
+}
+
+function firstEnqueueLabel(enqueue: ReturnType<typeof vi.fn>): string {
+  const [label] = firstEnqueueCall(enqueue);
+  if (typeof label !== "string") {
+    throw new Error("Expected enqueueSystemEvent label");
+  }
+  return label;
+}
+
+function firstEnqueueMeta(enqueue: ReturnType<typeof vi.fn>): Record<string, unknown> {
+  const [, meta] = firstEnqueueCall(enqueue);
+  if (!meta || typeof meta !== "object") {
+    throw new Error("Expected enqueueSystemEvent metadata");
+  }
+  return meta as Record<string, unknown>;
+}
+
+async function invokeReactionEvent(
+  handler: ReturnType<typeof createMSTeamsReactionHandler>,
+  activity: Record<string, unknown>,
+  direction: "added" | "removed",
+) {
+  await handler(
+    {
+      activity: {
+        type: "messageReaction",
+        conversation: { id: "dm-conv", conversationType: "personal" },
+        ...activity,
+      },
+      sendActivity: vi.fn(async () => undefined),
+    } as never,
+    direction,
+  );
+}
+
 describe("createMSTeamsReactionHandler", () => {
   describe("emoji mapping", () => {
     it("maps Teams reaction types to unicode emoji in event label", async () => {
@@ -84,7 +141,7 @@ describe("createMSTeamsReactionHandler", () => {
 
       const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).toHaveBeenCalledOnce();
-      const label: string = enqueue.mock.calls[0][0];
+      const label = firstEnqueueLabel(enqueue);
       expect(label).toContain("👍");
       expect(label).toContain("Alice");
       expect(label).toContain("msg-123");
@@ -125,7 +182,7 @@ describe("createMSTeamsReactionHandler", () => {
         );
 
         const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
-        const label: string = enqueue.mock.calls[0][0];
+        const label = firstEnqueueLabel(enqueue);
         expect(label).toContain(expectedEmoji);
       }
     });
@@ -133,185 +190,135 @@ describe("createMSTeamsReactionHandler", () => {
 
   describe("inbound reaction events", () => {
     it("enqueues system event for reactionsAdded", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsAdded: [{ type: "like" }],
-            from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-1",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsAdded: [{ type: "like" }],
+          from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
+          replyToId: "msg-1",
+        },
         "added",
       );
 
-      const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).toHaveBeenCalledOnce();
-      const [label, meta] = enqueue.mock.calls[0];
+      const label = firstEnqueueLabel(enqueue);
+      const meta = firstEnqueueMeta(enqueue);
       expect(label).toContain("added");
       expect(meta.sessionKey).toBe("test-session");
       expect(meta.contextKey).toContain("added");
     });
 
     it("enqueues system event for reactionsRemoved", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsRemoved: [{ type: "heart" }],
-            from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-2",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsRemoved: [{ type: "heart" }],
+          from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
+          replyToId: "msg-2",
+        },
         "removed",
       );
 
-      const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).toHaveBeenCalledOnce();
-      const [label] = enqueue.mock.calls[0];
+      const label = firstEnqueueLabel(enqueue);
       expect(label).toContain("removed");
       expect(label).toContain("❤️");
     });
 
     it("skips when reactions array is empty", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsAdded: [],
-            from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-3",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsAdded: [],
+          from: { id: "u1", aadObjectId: "allowed-aad", name: "User" },
+          replyToId: "msg-3",
+        },
         "added",
       );
 
-      const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).not.toHaveBeenCalled();
     });
 
     it("skips when from.id is missing", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsAdded: [{ type: "like" }],
-            from: {},
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-4",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsAdded: [{ type: "like" }],
+          from: {},
+          replyToId: "msg-4",
+        },
         "added",
       );
 
-      const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).not.toHaveBeenCalled();
     });
   });
 
   describe("sender authorization", () => {
     it("drops reaction from non-allowlisted DM sender", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsAdded: [{ type: "like" }],
-            from: { id: "bad-user", aadObjectId: "not-allowed", name: "Attacker" },
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-5",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsAdded: [{ type: "like" }],
+          from: { id: "bad-user", aadObjectId: "not-allowed", name: "Attacker" },
+          replyToId: "msg-5",
+        },
         "added",
       );
 
-      const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
       expect(enqueue).not.toHaveBeenCalled();
     });
 
     it("allows reaction from allowlisted DM sender", async () => {
-      const mockRuntime = buildMockRuntime();
-      setMSTeamsRuntime(mockRuntime);
-
-      const cfg: OpenClawConfig = {
-        channels: { msteams: { allowFrom: ["allowed-aad"] } },
-      } as OpenClawConfig;
-
-      const deps = buildDeps(cfg, mockRuntime);
-      const handler = createMSTeamsReactionHandler(deps);
-
-      await handler(
+      const { handler, enqueue } = createReactionTestHarness();
+      await invokeReactionEvent(
+        handler,
         {
-          activity: {
-            type: "messageReaction",
-            reactionsAdded: [{ type: "like" }],
-            from: { id: "good-user", aadObjectId: "allowed-aad", name: "Alice" },
-            conversation: { id: "dm-conv", conversationType: "personal" },
-            replyToId: "msg-6",
-          },
-          sendActivity: vi.fn(async () => undefined),
-        } as never,
+          reactionsAdded: [{ type: "like" }],
+          from: { id: "good-user", aadObjectId: "allowed-aad", name: "Alice" },
+          replyToId: "msg-6",
+        },
         "added",
       );
 
+      expect(enqueue).toHaveBeenCalledOnce();
+    });
+
+    it("allows reaction from static access group DM sender", async () => {
+      const mockRuntime = buildMockRuntime();
+      setMSTeamsRuntime(mockRuntime);
+      const cfg: OpenClawConfig = {
+        accessGroups: {
+          operators: {
+            type: "message.senders",
+            members: { msteams: ["allowed-aad"] },
+          },
+        },
+        channels: {
+          msteams: {
+            dmPolicy: "allowlist",
+            allowFrom: ["accessGroup:operators"],
+          },
+        },
+      } as OpenClawConfig;
+      const handler = createMSTeamsReactionHandler(buildDeps(cfg, mockRuntime));
       const enqueue = mockRuntime.system.enqueueSystemEvent as ReturnType<typeof vi.fn>;
+
+      await invokeReactionEvent(
+        handler,
+        {
+          reactionsAdded: [{ type: "like" }],
+          from: { id: "good-user", aadObjectId: "allowed-aad", name: "Alice" },
+          replyToId: "msg-7",
+        },
+        "added",
+      );
+
       expect(enqueue).toHaveBeenCalledOnce();
     });
   });

@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
 import {
   createPluginSetupWizardConfigure,
   createTestWizardPrompter,
   runSetupWizardConfigure,
-} from "../../../test/helpers/plugins/setup-wizard.js";
+} from "openclaw/plugin-sdk/plugin-test-runtime";
+import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../runtime-api.js";
 import "./zalo-js.test-mocks.js";
 import { zalouserSetupWizard } from "./setup-surface.js";
@@ -27,6 +27,26 @@ async function runSetup(params: {
 }
 
 describe("zalouser setup wizard", () => {
+  function expectEnabledDefaultSetup(
+    result: Awaited<ReturnType<typeof runSetup>>,
+    dmPolicy?: "pairing" | "allowlist",
+  ) {
+    expect(result.accountId).toBe("default");
+    const channelConfig = result.cfg.channels?.zalouser;
+    if (!channelConfig) {
+      throw new Error("expected Zalo Personal channel config");
+    }
+    const pluginEntry = result.cfg.plugins?.entries?.zalouser;
+    if (!pluginEntry) {
+      throw new Error("expected Zalo Personal plugin entry");
+    }
+    expect(channelConfig.enabled).toBe(true);
+    expect(pluginEntry.enabled).toBe(true);
+    if (dmPolicy) {
+      expect(channelConfig.dmPolicy).toBe(dmPolicy);
+    }
+  }
+
   function createQuickstartPrompter(params?: {
     note?: ReturnType<typeof createTestWizardPrompter>["note"];
     seen?: string[];
@@ -86,9 +106,7 @@ describe("zalouser setup wizard", () => {
 
     const result = await runSetup({ prompter });
 
-    expect(result.accountId).toBe("default");
-    expect(result.cfg.channels?.zalouser?.enabled).toBe(true);
-    expect(result.cfg.plugins?.entries?.zalouser?.enabled).toBe(true);
+    expectEnabledDefaultSetup(result);
   });
 
   it("prompts DM policy before group access in quickstart", async () => {
@@ -100,10 +118,7 @@ describe("zalouser setup wizard", () => {
       options: { quickstartDefaults: true },
     });
 
-    expect(result.accountId).toBe("default");
-    expect(result.cfg.channels?.zalouser?.enabled).toBe(true);
-    expect(result.cfg.plugins?.entries?.zalouser?.enabled).toBe(true);
-    expect(result.cfg.channels?.zalouser?.dmPolicy).toBe("pairing");
+    expectEnabledDefaultSetup(result, "pairing");
     expect(seen.indexOf("Zalo Personal DM policy")).toBeGreaterThanOrEqual(0);
     expect(seen.indexOf("Configure Zalo groups access?")).toBeGreaterThanOrEqual(0);
     expect(seen.indexOf("Zalo Personal DM policy")).toBeLessThan(
@@ -126,11 +141,8 @@ describe("zalouser setup wizard", () => {
       options: { quickstartDefaults: true },
     });
 
-    expect(result.accountId).toBe("default");
-    expect(result.cfg.channels?.zalouser?.enabled).toBe(true);
-    expect(result.cfg.plugins?.entries?.zalouser?.enabled).toBe(true);
-    expect(result.cfg.channels?.zalouser?.dmPolicy).toBe("allowlist");
-    expect(result.cfg.channels?.zalouser?.allowFrom).toEqual([]);
+    expectEnabledDefaultSetup(result, "allowlist");
+    expect(result.cfg.channels?.zalouser?.allowFrom).toStrictEqual([]);
     expect(
       note.mock.calls.some(([message]) => message.includes("No DM allowlist entries added yet.")),
     ).toBe(true);
@@ -150,7 +162,7 @@ describe("zalouser setup wizard", () => {
     const result = await runSetup({ prompter });
 
     expect(result.cfg.channels?.zalouser?.groupPolicy).toBe("allowlist");
-    expect(result.cfg.channels?.zalouser?.groups).toEqual({});
+    expect(result.cfg.channels?.zalouser?.groups).toStrictEqual({});
     expect(
       note.mock.calls.some(([message]) =>
         message.includes("No group allowlist entries added yet."),
@@ -202,7 +214,7 @@ describe("zalouser setup wizard", () => {
     const result = await runSetup({ prompter, forceAllowFrom: true });
 
     expect(result.cfg.channels?.zalouser?.dmPolicy).toBe("allowlist");
-    expect(result.cfg.channels?.zalouser?.allowFrom).toEqual([]);
+    expect(result.cfg.channels?.zalouser?.allowFrom).toStrictEqual([]);
     expect(seen).not.toContain("Zalo Personal DM policy");
     expect(seen).toContain("Zalouser allowFrom (name or user id)");
     expect(

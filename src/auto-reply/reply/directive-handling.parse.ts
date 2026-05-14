@@ -1,12 +1,20 @@
 import type { ExecAsk, ExecSecurity, ExecTarget } from "../../infra/exec-approvals.js";
 import { extractModelDirective } from "../model.js";
-import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "./directives.js";
+import { isSessionDefaultDirectiveValue } from "../thinking.js";
+import type {
+  ElevatedLevel,
+  ReasoningLevel,
+  ThinkLevel,
+  TraceLevel,
+  VerboseLevel,
+} from "./directives.js";
 import {
   extractElevatedDirective,
   extractExecDirective,
   extractFastDirective,
   extractReasoningDirective,
   extractStatusDirective,
+  extractTraceDirective,
   extractThinkDirective,
   extractVerboseDirective,
 } from "./directives.js";
@@ -18,12 +26,17 @@ export type InlineDirectives = {
   hasThinkDirective: boolean;
   thinkLevel?: ThinkLevel;
   rawThinkLevel?: string;
+  clearThinkLevel: boolean;
   hasVerboseDirective: boolean;
   verboseLevel?: VerboseLevel;
   rawVerboseLevel?: string;
+  hasTraceDirective: boolean;
+  traceLevel?: TraceLevel;
+  rawTraceLevel?: string;
   hasFastDirective: boolean;
   fastMode?: boolean;
   rawFastMode?: string;
+  clearFastMode: boolean;
   hasReasoningDirective: boolean;
   reasoningLevel?: ReasoningLevel;
   rawReasoningLevel?: string;
@@ -48,6 +61,7 @@ export type InlineDirectives = {
   hasModelDirective: boolean;
   rawModelDirective?: string;
   rawModelProfile?: string;
+  rawModelRuntime?: string;
   hasQueueDirective: boolean;
   queueMode?: QueueMode;
   queueReset: boolean;
@@ -82,11 +96,17 @@ export function parseInlineDirectives(
     hasDirective: hasVerboseDirective,
   } = extractVerboseDirective(thinkCleaned);
   const {
+    cleaned: traceCleaned,
+    traceLevel,
+    rawLevel: rawTraceLevel,
+    hasDirective: hasTraceDirective,
+  } = extractTraceDirective(verboseCleaned);
+  const {
     cleaned: fastCleaned,
     fastMode,
     rawLevel: rawFastMode,
     hasDirective: hasFastDirective,
-  } = extractFastDirective(verboseCleaned);
+  } = extractFastDirective(traceCleaned);
   const {
     cleaned: reasoningCleaned,
     reasoningLevel,
@@ -131,6 +151,7 @@ export function parseInlineDirectives(
     cleaned: modelCleaned,
     rawModel,
     rawProfile,
+    rawRuntime,
     hasDirective: hasModelDirective,
   } = extractModelDirective(statusCleaned, {
     aliases: options?.modelAliases,
@@ -155,12 +176,17 @@ export function parseInlineDirectives(
     hasThinkDirective,
     thinkLevel,
     rawThinkLevel,
+    clearThinkLevel: hasThinkDirective && isSessionDefaultDirectiveValue(rawThinkLevel),
     hasVerboseDirective,
     verboseLevel,
     rawVerboseLevel,
+    hasTraceDirective,
+    traceLevel,
+    rawTraceLevel,
     hasFastDirective,
     fastMode,
     rawFastMode,
+    clearFastMode: hasFastDirective && isSessionDefaultDirectiveValue(rawFastMode),
     hasReasoningDirective,
     reasoningLevel,
     rawReasoningLevel,
@@ -185,6 +211,7 @@ export function parseInlineDirectives(
     hasModelDirective,
     rawModelDirective: rawModel,
     rawModelProfile: rawProfile,
+    rawModelRuntime: rawRuntime,
     hasQueueDirective,
     queueMode,
     queueReset,

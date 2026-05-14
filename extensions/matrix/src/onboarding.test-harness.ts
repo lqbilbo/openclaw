@@ -23,6 +23,7 @@ const previousMatrixEnv = Object.fromEntries(
   MATRIX_ENV_KEYS.map((key) => [key, process.env[key]]),
 ) as Record<(typeof MATRIX_ENV_KEYS)[number], string | undefined>;
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Test helper lets callers ascribe plugin runtime shape.
 function createNonExitingTypedRuntimeEnv<TRuntime>(): TRuntime {
   return {
     log: vi.fn(),
@@ -88,6 +89,15 @@ export function createMatrixWizardPrompter(params: {
       return await resolvePromptValue("confirm", message, params.confirm, params.onConfirm);
     }),
   } as unknown as WizardPrompter;
+}
+
+export function installMatrixScopedEnvShortcut() {
+  process.env.MATRIX_HOMESERVER = "https://matrix.env.example.org";
+  process.env.MATRIX_USER_ID = "@env:example.org";
+  process.env.MATRIX_PASSWORD = "env-password"; // pragma: allowlist secret
+  process.env.MATRIX_ACCESS_TOKEN = "";
+  process.env.MATRIX_OPS_HOMESERVER = "https://matrix.ops.env.example.org";
+  process.env.MATRIX_OPS_ACCESS_TOKEN = "ops-env-token";
 }
 
 export async function runMatrixInteractiveConfigure(params: {
@@ -206,6 +216,29 @@ export function createMatrixTokenAddAccountPrompter(params?: {
   });
 }
 
+export function createMatrixEnvShortcutAddAccountPrompter(params?: {
+  notes?: string[];
+  select?: Record<string, string>;
+  text?: Record<string, string>;
+  confirm?: Record<string, boolean>;
+  onConfirm?: PromptHandler<boolean | Promise<boolean>>;
+}) {
+  return createMatrixWizardPrompter({
+    ...(params?.notes ? { notes: params.notes } : {}),
+    select: {
+      "Matrix already configured. What do you want to do?": "add-account",
+      "Matrix auth method": "token",
+      ...params?.select,
+    },
+    text: {
+      "Matrix account name": "ops",
+      ...params?.text,
+    },
+    ...(params?.confirm ? { confirm: params.confirm } : {}),
+    ...(params?.onConfirm ? { onConfirm: params.onConfirm } : {}),
+  });
+}
+
 export function createConfiguredMatrixTopLevelConfig(params?: {
   homeserver?: string;
   accessToken?: string | { source: "env"; provider: "default"; id: string };
@@ -262,6 +295,7 @@ export function createMatrixNamedAccountsConfig(params: {
     {
       homeserver: string;
       accessToken?: string;
+      encryption?: boolean;
     }
   >;
 }): CoreConfig {

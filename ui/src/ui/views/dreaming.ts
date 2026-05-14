@@ -1,10 +1,12 @@
 import { html, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { t } from "../../i18n/index.ts";
 import type {
   DreamingEntry,
   WikiImportInsights,
   WikiMemoryPalace,
 } from "../controllers/dreaming.ts";
+import { toSanitizedMarkdownHtml } from "../markdown.ts";
 
 // ── Diary entry parser ─────────────────────────────────────────────────
 
@@ -80,10 +82,7 @@ function formatDiaryChipLabel(date: string): string {
 
 function buildDiaryNavigation(entries: DiaryEntry[]): DiaryEntryNav[] {
   const reversed = [...entries].toReversed();
-  return reversed.map((entry, page) => ({
-    ...entry,
-    page,
-  }));
+  return reversed.map((entry, page) => Object.assign({}, entry, { page }));
 }
 
 type DreamingPhaseInfo = {
@@ -113,9 +112,12 @@ export type DreamingProps = {
   modeSaving: boolean;
   dreamDiaryLoading: boolean;
   dreamDiaryActionLoading: boolean;
+  dreamDiaryActionMessage: { kind: "success" | "error"; text: string } | null;
+  dreamDiaryActionArchivePath: string | null;
   dreamDiaryError: string | null;
   dreamDiaryPath: string | null;
   dreamDiaryContent: string | null;
+  memoryWikiEnabled: boolean;
   wikiImportInsightsLoading: boolean;
   wikiImportInsightsError: string | null;
   wikiImportInsights: WikiImportInsights | null;
@@ -126,6 +128,7 @@ export type DreamingProps = {
   onRefreshDiary: () => void;
   onRefreshImports: () => void;
   onRefreshMemoryPalace: () => void;
+  onOpenConfig: () => void;
   onOpenWikiPage: (lookup: string) => Promise<{
     title: string;
     path: string;
@@ -135,8 +138,11 @@ export type DreamingProps = {
     updatedAt?: string;
   } | null>;
   onBackfillDiary: () => void;
+  onCopyDreamingArchivePath: () => void;
+  onDedupeDreamDiary: () => void;
   onResetDiary: () => void;
   onResetGroundedShortTerm: () => void;
+  onRepairDreamingArtifacts: () => void;
   onRequestUpdate?: () => void;
 };
 
@@ -766,6 +772,20 @@ function renderAdvancedSection(props: DreamingProps) {
           <button
             class="btn btn--subtle btn--sm"
             ?disabled=${props.modeSaving || props.dreamDiaryActionLoading}
+            @click=${() => props.onDedupeDreamDiary()}
+          >
+            ${t("dreaming.scene.dedupeDiary")}
+          </button>
+          <button
+            class="btn btn--subtle btn--sm"
+            ?disabled=${props.modeSaving || props.dreamDiaryActionLoading}
+            @click=${() => props.onRepairDreamingArtifacts()}
+          >
+            ${t("dreaming.scene.repairCache")}
+          </button>
+          <button
+            class="btn btn--subtle btn--sm"
+            ?disabled=${props.modeSaving || props.dreamDiaryActionLoading}
             @click=${() => props.onBackfillDiary()}
           >
             ${props.dreamDiaryActionLoading
@@ -788,6 +808,31 @@ function renderAdvancedSection(props: DreamingProps) {
           </button>
         </div>
       </div>
+      ${props.dreamDiaryActionMessage
+        ? html`
+            <div
+              class="callout ${props.dreamDiaryActionMessage.kind === "success"
+                ? "success"
+                : "danger"}"
+              role="status"
+            >
+              <div class="row wrap items-center gap-2">
+                <span>${props.dreamDiaryActionMessage.text}</span>
+                ${props.dreamDiaryActionArchivePath
+                  ? html`
+                      <button
+                        class="btn btn--subtle btn--sm"
+                        ?disabled=${props.dreamDiaryActionLoading}
+                        @click=${() => props.onCopyDreamingArchivePath()}
+                      >
+                        Copy archive path
+                      </button>
+                    `
+                  : nothing}
+              </div>
+            </div>
+          `
+        : nothing}
 
       <div class="dreams-advanced__sections">
         ${renderAdvancedEntryList({
@@ -1283,7 +1328,7 @@ function renderDreamDiaryEntries(props: DreamingProps) {
         ${flattenDiaryBody(entry.body).map(
           (para, i) =>
             html`<p class="dreams-diary__para" style="animation-delay: ${0.3 + i * 0.15}s;">
-              ${para}
+              ${unsafeHTML(toSanitizedMarkdownHtml(para))}
             </p>`,
         )}
       </div>
@@ -1294,13 +1339,15 @@ function renderDreamDiaryEntries(props: DreamingProps) {
 // ── Diary section renderer ────────────────────────────────────────────
 
 function renderDiarySection(props: DreamingProps) {
+  const wikiTabSelected = _diarySubTab === "insights" || _diarySubTab === "palace";
+  const memoryWikiUnavailable = wikiTabSelected && !props.memoryWikiEnabled;
   const diaryError =
     _diarySubTab === "dreams"
       ? props.dreamDiaryError
       : _diarySubTab === "insights"
         ? props.wikiImportInsightsError
         : props.wikiMemoryPalaceError;
-  if (diaryError) {
+  if (diaryError && !memoryWikiUnavailable) {
     return html`
       <section class="dreams-diary">
         <div class="dreams-diary__error">${diaryError}</div>
@@ -1356,15 +1403,19 @@ function renderDiarySection(props: DreamingProps) {
           </div>
           <button
             class="btn btn--subtle btn--sm"
-            ?disabled=${props.modeSaving ||
-            (_diarySubTab === "dreams"
-              ? props.dreamDiaryLoading
-              : _diarySubTab === "insights"
-                ? props.wikiImportInsightsLoading
-                : props.wikiMemoryPalaceLoading)}
+            ?disabled=${memoryWikiUnavailable
+              ? false
+              : props.modeSaving ||
+                (_diarySubTab === "dreams"
+                  ? props.dreamDiaryLoading
+                  : _diarySubTab === "insights"
+                    ? props.wikiImportInsightsLoading
+                    : props.wikiMemoryPalaceLoading)}
             @click=${() => {
               _diaryPage = 0;
-              if (_diarySubTab === "dreams") {
+              if (memoryWikiUnavailable) {
+                props.onOpenConfig();
+              } else if (_diarySubTab === "dreams") {
                 props.onRefreshDiary();
               } else if (_diarySubTab === "insights") {
                 props.onRefreshImports();
@@ -1373,27 +1424,48 @@ function renderDiarySection(props: DreamingProps) {
               }
             }}
           >
-            ${_diarySubTab === "dreams"
-              ? props.dreamDiaryLoading
-                ? t("dreaming.diary.reloading")
-                : t("dreaming.diary.reload")
-              : _diarySubTab === "insights"
-                ? props.wikiImportInsightsLoading
-                  ? "Reloading…"
-                  : "Reload"
-                : props.wikiMemoryPalaceLoading
-                  ? "Reloading…"
-                  : "Reload"}
+            ${memoryWikiUnavailable
+              ? "How to enable"
+              : _diarySubTab === "dreams"
+                ? props.dreamDiaryLoading
+                  ? t("dreaming.diary.reloading")
+                  : t("dreaming.diary.reload")
+                : _diarySubTab === "insights"
+                  ? props.wikiImportInsightsLoading
+                    ? "Reloading…"
+                    : "Reload"
+                  : props.wikiMemoryPalaceLoading
+                    ? "Reloading…"
+                    : "Reload"}
           </button>
         </div>
         ${renderDiarySubtabExplainer()}
       </div>
 
-      ${_diarySubTab === "dreams"
-        ? renderDreamDiaryEntries(props)
-        : _diarySubTab === "insights"
-          ? renderDiaryImportsSection(props)
-          : renderMemoryPalaceSection(props)}
+      ${memoryWikiUnavailable
+        ? html`
+            <div class="dreams-diary__empty">
+              <div class="dreams-diary__empty-text">Memory Wiki is not enabled</div>
+              <div class="dreams-diary__empty-hint">
+                Imported Insights and Memory Palace are provided by the bundled
+                <code>memory-wiki</code> plugin.
+              </div>
+              <div class="dreams-diary__empty-hint">
+                Enable <code>plugins.entries.memory-wiki.enabled = true</code>, then reload this
+                tab.
+              </div>
+              <div class="dreams-diary__empty-actions">
+                <button class="btn btn--subtle btn--sm" @click=${() => props.onOpenConfig()}>
+                  Open Config
+                </button>
+              </div>
+            </div>
+          `
+        : _diarySubTab === "dreams"
+          ? renderDreamDiaryEntries(props)
+          : _diarySubTab === "insights"
+            ? renderDiaryImportsSection(props)
+            : renderMemoryPalaceSection(props)}
       ${renderWikiPreviewOverlay(props)}
     </section>
   `;

@@ -37,17 +37,7 @@ export function resolveAttemptSpawnWorkspaceDir(params: {
     : undefined;
 }
 
-export function shouldUseOpenAIWebSocketTransport(params: {
-  provider: string;
-  modelApi?: string | null;
-}): boolean {
-  // openai-codex normalizes to the ChatGPT backend HTTP path, not the public
-  // OpenAI Responses websocket endpoint. Keep it on HTTP until a provider-
-  // specific websocket target exists and is verified end-to-end.
-  return params.modelApi === "openai-responses" && params.provider === "openai";
-}
-
-export function shouldAppendAttemptCacheTtl(params: {
+function shouldAppendAttemptCacheTtl(params: {
   timedOutDuringCompaction: boolean;
   compactionOccurredThisAttempt: boolean;
   config?: OpenClawConfig;
@@ -86,5 +76,21 @@ export function appendAttemptCacheTtlIfNeeded(params: {
     provider: params.provider,
     modelId: params.modelId,
   });
+  return true;
+}
+
+export function shouldPersistCompletedBootstrapTurn(params: {
+  shouldRecordCompletedBootstrapTurn: boolean;
+  promptError: unknown;
+  aborted: boolean;
+  timedOutDuringCompaction: boolean;
+  compactionOccurredThisAttempt: boolean;
+}): boolean {
+  if (!params.shouldRecordCompletedBootstrapTurn || params.promptError || params.aborted) {
+    return false;
+  }
+  if (params.timedOutDuringCompaction || params.compactionOccurredThisAttempt) {
+    return false;
+  }
   return true;
 }

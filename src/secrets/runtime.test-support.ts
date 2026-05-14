@@ -6,7 +6,7 @@ import { setActivePluginRegistry } from "../plugins/runtime.js";
 import type { PluginWebSearchProviderEntry } from "../plugins/types.js";
 
 type PrepareSecretsRuntimeSnapshot = typeof import("./runtime.js").prepareSecretsRuntimeSnapshot;
-type WebProviderUnderTest = "brave" | "gemini" | "grok" | "kimi" | "perplexity" | "firecrawl";
+type WebProviderUnderTest = "brave" | "gemini" | "grok" | "kimi" | "perplexity";
 
 const { resolvePluginWebSearchProvidersMock } = vi.hoisted(() => ({
   resolvePluginWebSearchProvidersMock: vi.fn(() => buildTestWebSearchProviders()),
@@ -14,6 +14,10 @@ const { resolvePluginWebSearchProvidersMock } = vi.hoisted(() => ({
 
 vi.mock("../plugins/web-search-providers.runtime.js", () => ({
   resolvePluginWebSearchProviders: resolvePluginWebSearchProvidersMock,
+}));
+
+vi.mock("../plugins/installed-plugin-index-records.js", () => ({
+  loadInstalledPluginIndexInstallRecordsSync: () => ({}),
 }));
 
 export function asConfig(value: unknown): OpenClawConfig {
@@ -56,7 +60,7 @@ function createTestProvider(params: {
     getCredentialValue: readSearchConfigKey,
     setCredentialValue: (searchConfigTarget, value) => {
       const providerConfig =
-        params.id === "brave" || params.id === "firecrawl"
+        params.id === "brave"
           ? searchConfigTarget
           : ((searchConfigTarget[params.id] ??= {}) as { apiKey?: unknown });
       providerConfig.apiKey = value;
@@ -64,6 +68,15 @@ function createTestProvider(params: {
     getConfiguredCredentialValue: (config) =>
       (config?.plugins?.entries?.[params.pluginId]?.config as { webSearch?: { apiKey?: unknown } })
         ?.webSearch?.apiKey,
+    getConfiguredCredentialFallback:
+      params.id === "gemini"
+        ? (config) => {
+            const provider = (config?.models?.providers?.google ?? {}) as { apiKey?: unknown };
+            return provider.apiKey !== undefined
+              ? { path: "models.providers.google.apiKey", value: provider.apiKey }
+              : undefined;
+          }
+        : undefined,
     setConfiguredCredentialValue: (configTarget, value) => {
       const plugins = (configTarget.plugins ??= {}) as { entries?: Record<string, unknown> };
       const entries = (plugins.entries ??= {});
@@ -89,7 +102,6 @@ export function buildTestWebSearchProviders(): PluginWebSearchProviderEntry[] {
     createTestProvider({ id: "grok", pluginId: "xai", order: 30 }),
     createTestProvider({ id: "kimi", pluginId: "moonshot", order: 40 }),
     createTestProvider({ id: "perplexity", pluginId: "perplexity", order: 50 }),
-    createTestProvider({ id: "firecrawl", pluginId: "firecrawl", order: 60 }),
   ];
 }
 

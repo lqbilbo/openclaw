@@ -5,9 +5,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import "./subagent-registry.mocks.shared.js";
 import {
   clearSessionStoreCacheForTest,
-  drainSessionStoreLockQueuesForTest,
+  drainSessionStoreWriterQueuesForTest,
 } from "../config/sessions/store.js";
 import { captureEnv } from "../test-utils/env.js";
+import {
+  createSubagentRegistryTestDeps,
+  writeSubagentSessionEntry,
+} from "./subagent-registry.persistence.test-support.js";
 
 const hoisted = vi.hoisted(() => ({
   announceSpy: vi.fn(async () => true),
@@ -71,46 +75,24 @@ describe("subagent registry persistence resume", () => {
   const envSnapshot = captureEnv(["OPENCLAW_STATE_DIR"]);
   let tempStateDir: string | null = null;
 
-  const resolveSessionStorePath = (stateDir: string, agentId: string) =>
-    path.join(stateDir, "agents", agentId, "sessions", "sessions.json");
-
-  const readSessionStore = async (storePath: string) => {
-    try {
-      const raw = await fs.readFile(storePath, "utf8");
-      const parsed = JSON.parse(raw) as unknown;
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, Record<string, unknown>>;
-      }
-    } catch {
-      // ignore
-    }
-    return {} as Record<string, Record<string, unknown>>;
-  };
-
   const writeChildSessionEntry = async (params: {
     sessionKey: string;
     sessionId?: string;
     updatedAt?: number;
+    abortedLastRun?: boolean;
   }) => {
     if (!tempStateDir) {
       throw new Error("tempStateDir not initialized");
     }
-    const storePath = resolveSessionStorePath(tempStateDir, "main");
-    const store = await readSessionStore(storePath);
-    store[params.sessionKey] = {
-      ...store[params.sessionKey],
-      sessionId: params.sessionId ?? `sess-${Date.now()}`,
-      updatedAt: params.updatedAt ?? Date.now(),
-    };
-    await fs.mkdir(path.dirname(storePath), { recursive: true });
-    await fs.writeFile(storePath, `${JSON.stringify(store)}\n`, "utf8");
-    return storePath;
-  };
-
-  const flushQueuedRegistryWork = async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    return await writeSubagentSessionEntry({
+      stateDir: tempStateDir,
+      agentId: "main",
+      sessionKey: params.sessionKey,
+      sessionId: params.sessionId,
+      updatedAt: params.updatedAt,
+      abortedLastRun: params.abortedLastRun,
+      defaultSessionId: `sess-${Date.now()}`,
+    });
   };
 
   beforeAll(async () => {
@@ -129,19 +111,10 @@ describe("subagent registry persistence resume", () => {
       endedAt: 222,
     });
     mod.__testing.setDepsForTest({
-      callGateway: vi.mocked(callGatewayModule.callGateway),
-      cleanupBrowserSessionsForLifecycleEnd: vi.fn(async () => {}),
-      captureSubagentCompletionReply: vi.fn(async () => undefined),
-      ensureContextEnginesInitialized: vi.fn(),
-      ensureRuntimePluginsLoaded: vi.fn(),
-      loadConfig: vi.fn(() => ({})),
-      resolveAgentTimeoutMs: vi.fn(() => 100),
-      resolveContextEngine: vi.fn(async () => ({
-        info: { id: "test", name: "Test", version: "0.0.1" },
-        ingest: vi.fn(async () => ({ ingested: false })),
-        assemble: vi.fn(async ({ messages }) => ({ messages, estimatedTokens: 0 })),
-        compact: vi.fn(async () => ({ ok: false, compacted: false })),
-      })),
+      ...createSubagentRegistryTestDeps({
+        callGateway: vi.mocked(callGatewayModule.callGateway),
+        captureSubagentCompletionReply: vi.fn(async () => undefined),
+      }),
     });
     mod.resetSubagentRegistryForTests({ persist: false });
     vi.mocked(agentEventsModule.onAgentEvent).mockReset();
@@ -152,7 +125,7 @@ describe("subagent registry persistence resume", () => {
     announceSpy.mockClear();
     mod.__testing.setDepsForTest();
     mod.resetSubagentRegistryForTests({ persist: false });
-    await drainSessionStoreLockQueuesForTest();
+    await drainSessionStoreWriterQueuesForTest();
     clearSessionStoreCacheForTest();
     if (tempStateDir) {
       await fs.rm(tempStateDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
@@ -205,17 +178,16 @@ describe("subagent registry persistence resume", () => {
           requesterOrigin?: { channel?: string; accountId?: string };
         }
       | undefined;
-    expect(run).toBeDefined();
-    if (run) {
-      expect("requesterAccountId" in run).toBe(false);
-      expect("requesterChannel" in run).toBe(false);
+    if (run === undefined) {
+      throw new Error("expected persisted run");
     }
-    expect(run?.requesterOrigin?.channel).toBe("whatsapp");
+    expect("requesterAccountId" in run).toBe(false);
+    expect("requesterChannel" in run).toBe(false);
+    expect(run.requesterOrigin?.channel).toBe("whatsapp");
     expect(run?.requesterOrigin?.accountId).toBe("acct-main");
 
     mod.initSubagentRegistry();
 
-    await flushQueuedRegistryWork();
     await vi.waitFor(() => expect(announceSpy).toHaveBeenCalled(), {
       timeout: 1_000,
       interval: 10,
@@ -233,18 +205,14 @@ describe("subagent registry persistence resume", () => {
           outcome?: { status?: string };
         }
       | undefined;
-    expect(announce).toMatchObject({
-      childRunId: "run-1",
-      childSessionKey: "agent:main:subagent:test",
-      requesterSessionKey: "agent:main:main",
-      requesterOrigin: {
-        channel: "whatsapp",
-        accountId: "acct-main",
-      },
-      task: "do the thing",
-      cleanup: "keep",
-      outcome: { status: "ok" },
-    });
+    expect(announce?.childRunId).toBe("run-1");
+    expect(announce?.childSessionKey).toBe("agent:main:subagent:test");
+    expect(announce?.requesterSessionKey).toBe("agent:main:main");
+    expect(announce?.requesterOrigin?.channel).toBe("whatsapp");
+    expect(announce?.requesterOrigin?.accountId).toBe("acct-main");
+    expect(announce?.task).toBe("do the thing");
+    expect(announce?.cleanup).toBe("keep");
+    expect(announce?.outcome?.status).toBe("ok");
 
     const restored = mod.listSubagentRunsForRequester("agent:main:main")[0];
     expect(restored?.childSessionKey).toBe("agent:main:subagent:test");
