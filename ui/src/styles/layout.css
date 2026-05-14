@@ -473,8 +473,11 @@
   border-top: 1px solid var(--border);
 }
 
-.sidebar-footer img {
-  background: url("../beidianshuzhi.png");
+.sidebar-footer__logo {
+  width: 100%;
+  height: 48px;
+  background: url("../beidianshuzhi.png") no-repeat center center;
+  background-size: contain;
 }
 
 .sidebar--collapsed .sidebar-footer {

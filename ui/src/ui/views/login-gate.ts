@@ -17,8 +17,8 @@ export function renderLoginGate(state: AppViewState) {
       <div class="login-gate__card">
         <div class="login-gate__header">
           <div class="login-gate__logo">
-            <img class="left" src="../beidianshuzhi.png" alt="北电数智" />
-            <img class="right" src="../guangzhoushiyanshi.png" alt="广州实验室" />
+            <div class="left"></div>
+            <div class="right"></div>
           </div>
           <div class="login-gate__title">钟山科研智能体</div>
           <div class="login-gate__sub">${t("login.subtitle")}</div>

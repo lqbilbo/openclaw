@@ -4,6 +4,7 @@ import {
   normalizeToolName,
   resolveToolProfilePolicy,
 } from "../../../../src/agents/tool-policy-shared.js";
+import guangzhoushiyanshiPng from "../../guangzhoushiyanshi.png";
 import type {
   AgentIdentityResult,
   AgentsFilesListResult,
@@ -216,9 +217,8 @@ export function resolveAgentAvatarUrl(
   return null;
 }
 
-export function agentLogoUrl(basePath: string): string {
-  const base = basePath?.trim() ? basePath.replace(/\/$/, "") : "";
-  return base ? `${base}/guangzhoushiyanshi.png` : "guangzhoushiyanshi.png";
+export function agentLogoUrl(_basePath: string): string {
+  return guangzhoushiyanshiPng;
 }
 
 function isLikelyEmoji(value: string) {
@@ -581,7 +581,9 @@ export function buildModelOptions(
     options.unshift({ value: current, label: `Current (${current})` });
   }
   if (options.length === 0) {
-    return html` <option value="" disabled>No configured models</option> `;
+    return html`
+      <option value="" disabled>No configured models</option>
+    `;
   }
   return options.map((option) => html`<option value=${option.value}>${option.label}</option>`);
 }

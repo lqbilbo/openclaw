@@ -46,13 +46,15 @@
 .login-gate__logo .left {
   width: 182px;
   height: 48px;
-  object-fit: contain;
+  background: url("../beidianshuzhi.png") no-repeat center center;
+  background-size: contain;
 }
 
 .login-gate__logo .right {
   width: 128px;
   height: 48px;
-  object-fit: contain;
+  background: url("../guangzhoushiyanshi.png") no-repeat center center;
+  background-size: contain;
 }
 
 .login-gate__title {

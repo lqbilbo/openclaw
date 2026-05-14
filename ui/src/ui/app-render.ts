@@ -515,7 +515,7 @@ export function renderApp(state: AppViewState) {
           </nav>
 
           <div class="sidebar-footer">
-            <img src="/beidianshuzhi.png" alt="" style="width:100%;display:block;" />
+            <div class="sidebar-footer__logo"></div>
           </div>
         </aside>
         ${
