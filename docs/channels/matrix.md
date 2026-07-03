@@ -212,11 +212,39 @@ form:
 }
 ```
 
+The full object form accepts `{ mode, preview, progress }`:
+
+```json5
+{
+  channels: {
+    matrix: {
+      streaming: {
+        mode: "progress",
+        progress: {
+          label: "auto", // pick from configured or built-in labels (false to hide)
+          labels: ["Thinking", "Writing", "Searching"], // candidates for label: "auto"
+          maxLines: 8, // max rolling progress lines (default: 8)
+          maxLineChars: 120, // max chars per line before truncation (default: 120)
+          toolProgress: true, // show tool/progress activity (default: true)
+        },
+      },
+    },
+  },
+}
+```
+
+- `progress.label`: a custom label, `"auto"` or unset to choose from configured or built-in labels, or `false` to hide the label line.
+- `progress.labels`: candidate labels used only when `label` is `"auto"` or unset. Leave unset for built-in defaults.
+- `progress.maxLines`: maximum rolling progress lines kept in the draft. After this limit, older lines are trimmed.
+- `progress.maxLineChars`: maximum characters per compact progress line before truncation.
+- `progress.toolProgress`: when `true` (default), live tool/progress activity appears in the draft.
+
 | `streaming`       | Behavior                                                                                                                                                            |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `"off"` (default) | Wait for the full reply, send once. `true` ↔ `"partial"`, `false` ↔ `"off"`.                                                                                        |
 | `"partial"`       | Edit one normal text message in place as the model writes the current block. Stock Matrix clients may notify on the first preview, not the final edit.              |
 | `"quiet"`         | Same as `"partial"` but the message is a non-notifying notice. Recipients only get a notification once a per-user push rule matches the finalized edit (see below). |
+| `"progress"`      | Sends individual compact progress lines using a progress draft.                                                                                                     |
 
 `blockStreaming` is independent of `streaming`:
 
@@ -231,6 +259,20 @@ Notes:
 - Media replies always send attachments normally. If a stale preview can no longer be reused safely, OpenClaw redacts it before sending the final media reply.
 - Tool-progress preview updates are enabled by default when Matrix preview streaming is active. Set `streaming.preview.toolProgress: false` to keep preview edits for answer text but leave tool progress on the normal delivery path.
 - Preview edits cost extra Matrix API calls. Leave `streaming: "off"` if you want the most conservative rate-limit profile.
+
+## Voice messages
+
+Inbound Matrix voice notes are transcribed before the room mention gate. This lets a voice note that says the bot name trigger the agent in a `requireMention: true` room, and it gives the agent the transcript instead of only an audio attachment placeholder.
+
+Matrix uses the shared audio media provider configured under `tools.media.audio`, such as OpenAI `gpt-4o-mini-transcribe`. See [Media tools overview](/tools/media-overview) for provider setup and limits.
+
+Behavior details:
+
+- `m.audio` events and `m.file` events with an `audio/*` MIME type are eligible.
+- In encrypted rooms, OpenClaw decrypts the attachment through the existing Matrix media path before transcription.
+- The transcript is marked as machine-generated and untrusted in the agent prompt.
+- The attachment is marked as already transcribed so downstream media tools do not transcribe the same voice note again.
+- Set `tools.media.audio.enabled: false` to disable audio transcription globally.
 
 ## Approval metadata
 
@@ -375,7 +417,7 @@ If the homeserver requires UIA to upload cross-signing keys, OpenClaw tries no-a
 Useful flags:
 
 - `--recovery-key-stdin` (pair with `printf '%s\n' "$MATRIX_RECOVERY_KEY" | …`) or `--recovery-key <key>`
-- `--force-reset-cross-signing` to discard the current cross-signing identity (intentional only)
+- `--force-reset-cross-signing` to discard the current cross-signing identity (intentional only; requires the active recovery key to be stored or supplied with `--recovery-key-stdin`)
 
 ### Room-key backup
 
@@ -484,6 +526,8 @@ openclaw matrix devices prune-stale
     Matrix E2EE uses the official `matrix-js-sdk` Rust crypto path with `fake-indexeddb` as the IndexedDB shim. Crypto state persists to `crypto-idb-snapshot.json` (restrictive file permissions).
 
     Encrypted runtime state lives under `~/.openclaw/matrix/accounts/<account>/<homeserver>__<user>/<token-hash>/` and includes the sync store, crypto store, recovery key, IDB snapshot, thread bindings, and startup verification state. When the token changes but the account identity stays the same, OpenClaw reuses the best existing root so prior state remains visible.
+
+    A single older token-hash root can be a normal token-rotation continuity path. If OpenClaw logs `matrix: multiple populated token-hash storage roots detected`, inspect the account directory and archive stale sibling roots only after confirming the selected active root is healthy. Prefer moving stale roots into an `_archive/` directory over deleting them immediately.
 
   </Accordion>
 </AccordionGroup>
@@ -861,6 +905,7 @@ Room allowlist keys (`groups`, legacy `rooms`) should be room IDs or aliases. Pl
 
 - `groupPolicy`: `"open"`, `"allowlist"`, or `"disabled"`. Default: `"allowlist"`.
 - `groupAllowFrom`: allowlist of user IDs for room traffic.
+- `mentionPatterns`: scoped regex patterns for room mentions. Object with `{ mode: "allow"|"deny", allowIn: [roomId, ...], denyIn: [roomId, ...] }`. Controls whether configured `agents.list[].groupChat.mentionPatterns` apply per-room.
 - `dm.enabled`: when `false`, ignore all DMs. Default: `true`.
 - `dm.policy`: `"pairing"` (default), `"allowlist"`, `"open"`, or `"disabled"`. Applies after the bot has joined and classified the room as a DM; it does not affect invite handling.
 - `dm.allowFrom`: allowlist of user IDs for DM traffic.
@@ -878,7 +923,7 @@ Room allowlist keys (`groups`, legacy `rooms`) should be room IDs or aliases. Pl
 - `replyToMode`: `"off"`, `"first"`, `"all"`, or `"batched"`.
 - `threadReplies`: `"off"`, `"inbound"`, or `"always"`.
 - `threadBindings`: per-channel overrides for thread-bound session routing and lifecycle.
-- `streaming`: `"off"` (default), `"partial"`, `"quiet"`, or object form `{ mode, preview: { toolProgress } }`. `true` ↔ `"partial"`, `false` ↔ `"off"`.
+- `streaming`: `"off"` (default), `"partial"`, `"quiet"`, `"progress"`, or object form `{ mode, preview: { toolProgress }, progress: { label, labels, maxLines, maxLineChars, toolProgress } }`. `true` ↔ `"partial"`, `false` ↔ `"off"`.
 - `blockStreaming`: when `true`, completed assistant blocks are kept as separate progress messages.
 - `markdown`: optional Markdown rendering config for outbound text.
 - `responsePrefix`: optional string prepended to outbound replies.
@@ -898,7 +943,10 @@ Room allowlist keys (`groups`, legacy `rooms`) should be room IDs or aliases. Pl
 - `actions`: per-action tool gating (`messages`, `reactions`, `pins`, `profile`, `memberInfo`, `channelInfo`, `verification`).
 - `groups`: per-room policy map. Session identity uses the stable room ID after resolution. (`rooms` is a legacy alias.)
   - `groups.<room>.account`: restrict one inherited room entry to a specific account.
+  - `groups.<room>.enabled`: per-room toggle. When `false`, the room is ignored as if it were not in the map.
+  - `groups.<room>.requireMention`: per-room override of the channel-level mention requirement.
   - `groups.<room>.allowBots`: per-room override of the channel-level setting (`true` or `"mentions"`).
+  - `groups.<room>.botLoopProtection`: per-room override for bot-to-bot loop protection budget.
   - `groups.<room>.users`: per-room sender allowlist.
   - `groups.<room>.tools`: per-room tool allow/deny overrides.
   - `groups.<room>.autoReply`: per-room mention-gating override. `true` disables mention requirements for that room; `false` forces them back on.

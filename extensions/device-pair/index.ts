@@ -1,41 +1,25 @@
+// Device Pair plugin entrypoint registers its OpenClaw integration.
 import { rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { definePluginEntry, type OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
-
-type DevicePairApiModule = typeof import("./api.js");
+import { buildDevicePairPairingQrChannelData } from "./pairing-qr-channel-data.js";
 type NotifyModule = typeof import("./notify.js");
-type PairCommandApproveModule = typeof import("./pair-command-approve.js");
-type PairCommandAuthModule = typeof import("./pair-command-auth.js");
 
-let devicePairApiModulePromise: Promise<DevicePairApiModule> | undefined;
-let notifyModulePromise: Promise<NotifyModule> | undefined;
-let pairCommandApproveModulePromise: Promise<PairCommandApproveModule> | undefined;
-let pairCommandAuthModulePromise: Promise<PairCommandAuthModule> | undefined;
+const loadDevicePairApiModule = createLazyRuntimeModule(() => import("./api.js"));
 
-function loadDevicePairApiModule(): Promise<DevicePairApiModule> {
-  devicePairApiModulePromise ??= import("./api.js");
-  return devicePairApiModulePromise;
-}
+const loadNotifyModule = createLazyRuntimeModule(() => import("./notify.js"));
 
-function loadNotifyModule(): Promise<NotifyModule> {
-  notifyModulePromise ??= import("./notify.js");
-  return notifyModulePromise;
-}
+const loadPairCommandApproveModule = createLazyRuntimeModule(
+  () => import("./pair-command-approve.js"),
+);
 
-function loadPairCommandApproveModule(): Promise<PairCommandApproveModule> {
-  pairCommandApproveModulePromise ??= import("./pair-command-approve.js");
-  return pairCommandApproveModulePromise;
-}
-
-function loadPairCommandAuthModule(): Promise<PairCommandAuthModule> {
-  pairCommandAuthModulePromise ??= import("./pair-command-auth.js");
-  return pairCommandAuthModulePromise;
-}
+const loadPairCommandAuthModule = createLazyRuntimeModule(() => import("./pair-command-auth.js"));
 
 function formatDurationMinutes(expiresAtMs: number): string {
   const msRemaining = Math.max(0, expiresAtMs - Date.now());
@@ -330,10 +314,6 @@ function pickMatchingIPv4(predicate: (address: string) => boolean): string | nul
   return null;
 }
 
-function pickLanIPv4(): string | null {
-  return pickMatchingIPv4(isPrivateIPv4);
-}
-
 function pickTailnetIPv4(): string | null {
   return pickMatchingIPv4(isTailnetIPv4);
 }
@@ -394,7 +374,8 @@ function resolveRequiredAuthLabel(
 }
 
 async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResult> {
-  const { resolveGatewayBindUrl, resolveGatewayPort } = await loadDevicePairApiModule();
+  const { resolveAdvertisedLanHost, resolveGatewayBindUrl, resolveGatewayPort } =
+    await loadDevicePairApiModule();
   const cfg = api.config;
   const pluginCfg = (api.pluginConfig ?? {}) as DevicePairPluginConfig;
   const scheme = resolveScheme(cfg);
@@ -428,13 +409,14 @@ async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResu
     return { url: remoteUrl, source: "gateway.remote.url" };
   }
 
+  const advertisedLanHost = cfg.gateway?.bind === "lan" ? await resolveAdvertisedLanHost() : null;
   const bindResult = resolveGatewayBindUrl({
     bind: cfg.gateway?.bind,
     customBindHost: cfg.gateway?.customBindHost,
     scheme,
     port,
     pickTailnetHost: pickTailnetIPv4,
-    pickLanHost: pickLanIPv4,
+    pickLanHost: () => advertisedLanHost,
   });
   if (bindResult) {
     return bindResult;
@@ -672,8 +654,11 @@ export default definePluginEntry({
         const gatewayClientScopes = Array.isArray(ctx.gatewayClientScopes)
           ? ctx.gatewayClientScopes
           : undefined;
-        const { buildMissingPairingScopeReply, resolvePairingCommandAuthState } =
-          await loadPairCommandAuthModule();
+        const {
+          buildMissingPairingScopeReply,
+          buildMissingSetupHandoffScopeReply,
+          resolvePairingCommandAuthState,
+        } = await loadPairCommandAuthModule();
         const authState = resolvePairingCommandAuthState({
           channel: ctx.channel,
           gatewayClientScopes,
@@ -740,6 +725,10 @@ export default definePluginEntry({
                 ? `Invalidated ${cleared.removed} unused setup code${cleared.removed === 1 ? "" : "s"}.`
                 : "No unused setup codes were active.",
           };
+        }
+
+        if (authState.isMissingSetupHandoffPrivilege) {
+          return buildMissingSetupHandoffScopeReply();
         }
 
         const authLabelResult = resolveAuthLabel(api.config);
@@ -826,10 +815,9 @@ export default definePluginEntry({
 
           api.logger.info?.(`device-pair: QR fallback channel=${channel} target=${target}`);
           if (channel === "webchat") {
-            let qrDataUrl: string;
             try {
               const { renderQrPngDataUrl } = await loadDevicePairApiModule();
-              qrDataUrl = await renderQrPngDataUrl(setupCode);
+              await renderQrPngDataUrl(setupCode);
             } catch (err) {
               const { revokeDeviceBootstrapToken } = await loadDevicePairApiModule();
               api.logger.warn?.(
@@ -854,7 +842,10 @@ export default definePluginEntry({
                   expiresAtMs: payload.expiresAtMs,
                 }),
               ].join("\n"),
-              mediaUrl: qrDataUrl,
+              channelData: buildDevicePairPairingQrChannelData({
+                setupCode,
+                expiresAtMs: payload.expiresAtMs,
+              }),
               sensitiveMedia: true,
             };
           }

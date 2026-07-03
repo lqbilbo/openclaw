@@ -1,3 +1,4 @@
+// Control UI tests cover cron behavior.
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_CRON_FORM } from "../app-defaults.ts";
 import {
@@ -11,6 +12,7 @@ import {
   runCronJob,
   startCronEdit,
   startCronClone,
+  updateCronJobsFilter,
   validateCronForm,
   type CronState,
 } from "./cron.ts";
@@ -24,6 +26,8 @@ function createState(overrides: Partial<CronState> = {}): CronState {
     cronQuickCreateStep: "what",
     cronQuickCreateDraft: null,
     cronJobsLoadingMore: false,
+    cronJobsReloadPending: false,
+    cronJobsReloadPendingTableFilters: false,
     cronJobs: [],
     cronJobsTotal: 0,
     cronJobsHasMore: false,
@@ -98,6 +102,13 @@ function requestPayload(call: readonly [method: string, payload?: unknown]) {
 function requestPatch(call: readonly [method: string, payload?: unknown]) {
   return requireRecord(requestPayload(call).patch, `${call[0]} patch`);
 }
+
+type EmptyCronListResponse = {
+  jobs: [];
+  total: number;
+  hasMore: boolean;
+  nextOffset: null;
+};
 
 describe("cron controller", () => {
   it("loads model suggestions from the configured model view", async () => {
@@ -176,9 +187,10 @@ describe("cron controller", () => {
       },
     });
 
-    await addCronJob(state);
+    const saved = await addCronJob(state);
 
     const addCall = findRequestCall(request.mock.calls, "cron.add");
+    expect(saved).toBe(true);
     const payload = requestPayload(addCall);
     expectRecordFields(payload, {
       name: "webhook job",
@@ -393,6 +405,108 @@ describe("cron controller", () => {
     });
   });
 
+  it("sends explicit null model/thinking clears when blanking stored overrides on edit", async () => {
+    const request = vi.fn(async (method: string, _payload?: unknown) => {
+      if (method === "cron.update") {
+        return { id: "job-clear-overrides" };
+      }
+      if (method === "cron.list") {
+        return { jobs: [{ id: "job-clear-overrides" }] };
+      }
+      if (method === "cron.status") {
+        return { enabled: true, jobs: 1, nextWakeAtMs: null };
+      }
+      return {};
+    });
+
+    const state = createState({
+      client: {
+        request,
+      } as unknown as CronState["client"],
+      cronEditingJobId: "job-clear-overrides",
+      cronJobs: [
+        {
+          id: "job-clear-overrides",
+          payload: {
+            kind: "agentTurn",
+            message: "do work",
+            model: "openai/gpt-5.5",
+            thinking: "high",
+          },
+        } as unknown as CronState["cronJobs"][number],
+      ],
+      cronForm: {
+        ...DEFAULT_CRON_FORM,
+        name: "clear overrides",
+        scheduleKind: "every",
+        everyAmount: "30",
+        everyUnit: "minutes",
+        sessionTarget: "isolated",
+        wakeMode: "next-heartbeat",
+        payloadKind: "agentTurn",
+        payloadText: "do work",
+        payloadModel: "",
+        payloadThinking: "",
+      },
+    });
+
+    await addCronJob(state);
+
+    const updateCall = findRequestCall(request.mock.calls, "cron.update");
+    expectNestedRecordFields(requestPatch(updateCall), "payload", {
+      kind: "agentTurn",
+      message: "do work",
+      model: null,
+      thinking: null,
+    });
+  });
+
+  it("does not send null model/thinking for a new job with blank fields", async () => {
+    const request = vi.fn(async (method: string, _payload?: unknown) => {
+      if (method === "cron.add") {
+        return { id: "job-new-blank" };
+      }
+      if (method === "cron.list") {
+        return { jobs: [{ id: "job-new-blank" }] };
+      }
+      if (method === "cron.status") {
+        return { enabled: true, jobs: 1, nextWakeAtMs: null };
+      }
+      return {};
+    });
+
+    const state = createState({
+      client: {
+        request,
+      } as unknown as CronState["client"],
+      cronForm: {
+        ...DEFAULT_CRON_FORM,
+        name: "new blank",
+        scheduleKind: "every",
+        everyAmount: "30",
+        everyUnit: "minutes",
+        sessionTarget: "isolated",
+        wakeMode: "next-heartbeat",
+        payloadKind: "agentTurn",
+        payloadText: "do work",
+        payloadModel: "",
+        payloadThinking: "",
+      },
+    });
+
+    await addCronJob(state);
+
+    const addCall = findRequestCall(request.mock.calls, "cron.add");
+    // A new job never had a stored override, so a blank field stays omitted
+    // (no explicit null clear) rather than being mistaken for a cleared value.
+    expectNestedRecordFields(requestPayload(addCall), "payload", {
+      kind: "agentTurn",
+      message: "do work",
+      model: undefined,
+      thinking: undefined,
+    });
+  });
+
   it("does not submit stale announce delivery when unsupported", async () => {
     const request = vi.fn(async (method: string, _payload?: unknown) => {
       if (method === "cron.add") {
@@ -586,6 +700,132 @@ describe("cron controller", () => {
     expect(state.cronForm.deliveryChannel).toBe("telegram");
     expect(state.cronForm.deliveryTo).toBe("123");
     expect(state.cronForm.deliveryAccountId).toBe("bot-2");
+  });
+
+  it("preserves command payloads when editing Control UI metadata", async () => {
+    const request = vi.fn(async (method: string, _payload?: unknown) => {
+      if (method === "cron.update") {
+        return { id: "job-command" };
+      }
+      if (method === "cron.list") {
+        return { jobs: [{ id: "job-command" }] };
+      }
+      if (method === "cron.status") {
+        return { enabled: true, jobs: 1, nextWakeAtMs: null };
+      }
+      return {};
+    });
+    const job = {
+      id: "job-command",
+      name: "Command",
+      enabled: true,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      schedule: { kind: "every" as const, everyMs: 600_000 },
+      sessionTarget: "isolated" as const,
+      wakeMode: "next-heartbeat" as const,
+      payload: { kind: "command" as const, argv: ["sh", "-lc", "echo ok"] },
+      delivery: { mode: "announce" as const, channel: "telegram", to: "123" },
+      state: {},
+    };
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobs: [job],
+    });
+
+    startCronEdit(state, job);
+    state.cronForm.name = "Command renamed";
+    await addCronJob(state);
+
+    const updateCall = findRequestCall(request.mock.calls, "cron.update");
+    const patch = requestPatch(updateCall);
+    expect(patch.name).toBe("Command renamed");
+    expect(patch).not.toHaveProperty("payload");
+  });
+
+  it("preserves on-exit schedules when editing Control UI metadata", async () => {
+    const request = vi.fn(async (method: string, _payload?: unknown) => {
+      if (method === "cron.update") {
+        return { id: "job-on-exit" };
+      }
+      if (method === "cron.list") {
+        return { jobs: [{ id: "job-on-exit" }] };
+      }
+      if (method === "cron.status") {
+        return { enabled: true, jobs: 1, nextWakeAtMs: null };
+      }
+      return {};
+    });
+    const job = {
+      id: "job-on-exit",
+      name: "On exit",
+      enabled: true,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      schedule: { kind: "on-exit" as const, command: "make build", cwd: "/repo" },
+      sessionTarget: "isolated" as const,
+      wakeMode: "next-heartbeat" as const,
+      payload: { kind: "agentTurn" as const, message: "report" },
+      delivery: { mode: "none" as const },
+      state: {},
+    };
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobs: [job],
+    });
+
+    startCronEdit(state, job);
+    state.cronForm.name = "On exit renamed";
+    state.cronForm.cronExpr = "";
+    await addCronJob(state);
+
+    const updateCall = findRequestCall(request.mock.calls, "cron.update");
+    const patch = requestPatch(updateCall);
+    expect(patch.name).toBe("On exit renamed");
+    expect(patch).not.toHaveProperty("schedule");
+    expect(state.cronFieldErrors).toEqual({});
+  });
+
+  it("applies schedule edits when changing an on-exit job to a regular schedule", async () => {
+    const request = vi.fn(async (method: string, _payload?: unknown) => {
+      if (method === "cron.update") {
+        return { id: "job-on-exit" };
+      }
+      if (method === "cron.list") {
+        return { jobs: [{ id: "job-on-exit" }] };
+      }
+      if (method === "cron.status") {
+        return { enabled: true, jobs: 1, nextWakeAtMs: null };
+      }
+      return {};
+    });
+    const job = {
+      id: "job-on-exit",
+      name: "On exit",
+      enabled: true,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      schedule: { kind: "on-exit" as const, command: "make build", cwd: "/repo" },
+      sessionTarget: "isolated" as const,
+      wakeMode: "next-heartbeat" as const,
+      payload: { kind: "agentTurn" as const, message: "report" },
+      delivery: { mode: "none" as const },
+      state: {},
+    };
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobs: [job],
+    });
+
+    startCronEdit(state, job);
+    state.cronForm.scheduleKind = "every";
+    state.cronForm.everyAmount = "5";
+    state.cronForm.everyUnit = "minutes";
+    await addCronJob(state);
+
+    const updateCall = findRequestCall(request.mock.calls, "cron.update");
+    const patch = requestPatch(updateCall);
+    expect(patch.schedule).toEqual({ kind: "every", everyMs: 300_000 });
   });
 
   it('keeps implicit announce delivery implicit when editing a job that shows "last" in the form', async () => {
@@ -1128,6 +1368,18 @@ describe("cron controller", () => {
     expect(errors.deliveryTo).toBe("cron.errors.webhookUrlInvalid");
   });
 
+  it("does not require cron expression fields for on-exit schedules", () => {
+    const errors = validateCronForm({
+      ...DEFAULT_CRON_FORM,
+      name: "on exit",
+      scheduleKind: "on-exit",
+      cronExpr: "",
+      payloadKind: "agentTurn",
+      payloadText: "report",
+    });
+    expect(errors.cronExpr).toBeUndefined();
+  });
+
   it("blocks add/update submit when validation errors exist", async () => {
     const request = vi.fn(async () => ({}));
     const state = createState({
@@ -1138,7 +1390,8 @@ describe("cron controller", () => {
         payloadText: "",
       },
     });
-    await addCronJob(state);
+    const saved = await addCronJob(state);
+    expect(saved).toBe(false);
     expect(request).not.toHaveBeenCalled();
     expectRecordFields(state.cronFieldErrors, {
       name: "cron.errors.nameRequired",
@@ -1251,6 +1504,8 @@ describe("cron controller", () => {
           offset: 0,
           query: "daily",
           enabled: "enabled",
+          scheduleKind: "cron",
+          lastRunStatus: "error",
           sortBy: "updatedAtMs",
           sortDir: "desc",
         });
@@ -1279,15 +1534,169 @@ describe("cron controller", () => {
       client: { request } as unknown as CronState["client"],
       cronJobsQuery: "daily",
       cronJobsEnabledFilter: "enabled",
+      cronJobsScheduleKindFilter: "cron",
+      cronJobsLastStatusFilter: "error",
       cronJobsSortBy: "updatedAtMs",
       cronJobsSortDir: "desc",
     });
 
-    await loadCronJobsPage(state);
+    await loadCronJobsPage(state, { tableFilters: true });
 
     expect(state.cronJobs).toHaveLength(1);
     expect(state.cronJobsTotal).toBe(1);
     expect(state.cronJobsHasMore).toBe(false);
+  });
+
+  it("keeps table-only filters out of shared cron jobs loads", async () => {
+    const request = vi.fn(async (method: string, payload?: unknown) => {
+      if (method === "cron.list") {
+        const listPayload = requireRecord(payload, "cron.list payload");
+        expect(listPayload).not.toHaveProperty("scheduleKind");
+        expect(listPayload).not.toHaveProperty("lastRunStatus");
+        return { jobs: [], total: 0, hasMore: false, nextOffset: null };
+      }
+      return {};
+    });
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobsScheduleKindFilter: "cron",
+      cronJobsLastStatusFilter: "error",
+    });
+
+    await loadCronJobsPage(state);
+
+    expect(request).toHaveBeenCalledWith(
+      "cron.list",
+      expect.not.objectContaining({
+        scheduleKind: expect.anything(),
+        lastRunStatus: expect.anything(),
+      }),
+    );
+  });
+
+  it("reloads cron jobs after filters change during an in-flight table load", async () => {
+    let resolveFirst!: (value: EmptyCronListResponse) => void;
+    const firstResponse = new Promise<EmptyCronListResponse>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const request = vi.fn(async (method: string, payload?: unknown) => {
+      if (method !== "cron.list") {
+        return {};
+      }
+      if (request.mock.calls.length === 1) {
+        return firstResponse;
+      }
+      expectRecordFields(requireRecord(payload, "pending cron.list payload"), {
+        scheduleKind: "cron",
+        lastRunStatus: "unknown",
+      });
+      return { jobs: [], total: 0, hasMore: false, nextOffset: null };
+    });
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+    });
+
+    const firstLoad = loadCronJobsPage(state, { tableFilters: true });
+    updateCronJobsFilter(state, {
+      cronJobsScheduleKindFilter: "cron",
+      cronJobsLastStatusFilter: "unknown",
+    });
+    await loadCronJobsPage(state, { tableFilters: true });
+    resolveFirst({ jobs: [], total: 0, hasMore: false, nextOffset: null });
+    await firstLoad;
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(state.cronJobsReloadPending).toBe(false);
+    expect(state.cronJobsReloadPendingTableFilters).toBe(false);
+  });
+
+  it("reloads cron jobs after filters change during an in-flight append load", async () => {
+    let resolveAppend!: (value: EmptyCronListResponse) => void;
+    const appendResponse = new Promise<EmptyCronListResponse>((resolve) => {
+      resolveAppend = resolve;
+    });
+    const request = vi.fn(async (method: string, payload?: unknown) => {
+      if (method !== "cron.list") {
+        return {};
+      }
+      if (request.mock.calls.length === 1) {
+        expectRecordFields(requireRecord(payload, "append cron.list payload"), {
+          offset: 1,
+        });
+        return appendResponse;
+      }
+      expectRecordFields(requireRecord(payload, "pending append cron.list payload"), {
+        offset: 0,
+        scheduleKind: "cron",
+        lastRunStatus: "unknown",
+      });
+      return { jobs: [], total: 0, hasMore: false, nextOffset: null };
+    });
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobs: [
+        {
+          id: "existing",
+          name: "Existing",
+          enabled: true,
+          createdAtMs: 0,
+          updatedAtMs: 0,
+          schedule: { kind: "every", everyMs: 60_000 },
+          sessionTarget: "main",
+          wakeMode: "next-heartbeat",
+          payload: { kind: "systemEvent", text: "ping" },
+        },
+      ],
+      cronJobsHasMore: true,
+      cronJobsNextOffset: 1,
+    });
+
+    const appendLoad = loadCronJobsPage(state, { append: true, tableFilters: true });
+    updateCronJobsFilter(state, {
+      cronJobsScheduleKindFilter: "cron",
+      cronJobsLastStatusFilter: "unknown",
+    });
+    await loadCronJobsPage(state, { tableFilters: true });
+    resolveAppend({ jobs: [], total: 0, hasMore: false, nextOffset: null });
+    await appendLoad;
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(state.cronJobsReloadPending).toBe(false);
+    expect(state.cronJobsReloadPendingTableFilters).toBe(false);
+  });
+
+  it("uses the latest queued cron jobs table-filter mode", async () => {
+    let resolveFirst!: (value: EmptyCronListResponse) => void;
+    const firstResponse = new Promise<EmptyCronListResponse>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const request = vi.fn(async (method: string, payload?: unknown) => {
+      if (method !== "cron.list") {
+        return {};
+      }
+      if (request.mock.calls.length === 1) {
+        return firstResponse;
+      }
+      const pendingPayload = requireRecord(payload, "latest pending cron.list payload");
+      expect(pendingPayload).not.toHaveProperty("scheduleKind");
+      expect(pendingPayload).not.toHaveProperty("lastRunStatus");
+      return { jobs: [], total: 0, hasMore: false, nextOffset: null };
+    });
+    const state = createState({
+      client: { request } as unknown as CronState["client"],
+      cronJobsScheduleKindFilter: "cron",
+      cronJobsLastStatusFilter: "unknown",
+    });
+
+    const firstLoad = loadCronJobsPage(state);
+    await loadCronJobsPage(state, { tableFilters: true });
+    await loadCronJobsPage(state);
+    resolveFirst({ jobs: [], total: 0, hasMore: false, nextOffset: null });
+    await firstLoad;
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(state.cronJobsReloadPending).toBe(false);
+    expect(state.cronJobsReloadPendingTableFilters).toBe(false);
   });
 
   it("drops malformed cron jobs before they enter UI state", async () => {

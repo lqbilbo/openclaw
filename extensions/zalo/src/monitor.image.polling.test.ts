@@ -1,3 +1,4 @@
+// Zalo tests cover monitor.image.polling plugin behavior.
 import { createRuntimeEnv } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -67,6 +68,9 @@ describe("Zalo polling image handling", () => {
       finalizeInboundContextMock,
       recordInboundSessionMock,
     });
+    expect(finalizeInboundContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ Timestamp: 1774084566880 }),
+    );
 
     abort.abort();
     await run;

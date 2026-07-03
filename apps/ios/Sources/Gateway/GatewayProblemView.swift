@@ -9,57 +9,17 @@ struct GatewayProblemBanner: View {
     var onShowDetails: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: self.iconName)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(self.tint)
-                    .frame(width: 20)
-                    .padding(.top, 2)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(self.problem.title)
-                            .font(.subheadline.weight(.semibold))
-                            .multilineTextAlignment(.leading)
-                        Spacer(minLength: 0)
-                        Text(self.ownerLabel)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(self.problem.message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let requestId = self.problem.requestId {
-                        Text("Request ID: \(requestId)")
-                            .font(.system(.caption, design: .monospaced).weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-            }
-
-            HStack(spacing: 10) {
-                if let primaryActionTitle, let onPrimaryAction {
-                    Button(primaryActionTitle, action: onPrimaryAction)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                }
-                if let onShowDetails {
-                    Button("Details", action: onShowDetails)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            .thinMaterial,
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        OpenClawNoticeBanner(
+            icon: self.iconName,
+            title: self.problem.title,
+            message: self.problem.message,
+            ownerLabel: self.ownerLabel,
+            tint: self.tint,
+            detail: self.problem.requestId.map(OpenClawNoticeDetail.requestID),
+            primaryActionTitle: self.primaryActionTitle,
+            onPrimaryAction: self.onPrimaryAction,
+            secondaryActionTitle: "Details",
+            onSecondaryAction: self.onShowDetails)
     }
 
     private var iconName: String {
@@ -90,11 +50,11 @@ struct GatewayProblemBanner: View {
              .pairingRoleUpgradeRequired,
              .pairingScopeUpgradeRequired,
              .pairingMetadataUpgradeRequired:
-            .orange
+            OpenClawBrand.warn
         case .timeout, .connectionRefused, .reachabilityFailed, .websocketCancelled:
-            .yellow
+            OpenClawBrand.warn
         default:
-            .red
+            OpenClawBrand.danger
         }
     }
 
@@ -103,7 +63,7 @@ struct GatewayProblemBanner: View {
         case .gateway:
             "Fix on gateway"
         case .iphone:
-            "Fix on iPhone"
+            "Fix on this device"
         case .both:
             "Check both"
         case .network:
@@ -219,9 +179,9 @@ struct GatewayProblemDetailsSheet: View {
         case .gateway:
             "Primary fix: gateway"
         case .iphone:
-            "Primary fix: this iPhone"
+            "Primary fix: this device"
         case .both:
-            "Primary fix: check both this iPhone and the gateway"
+            "Primary fix: check both this device and the gateway"
         case .network:
             "Primary fix: network or remote access"
         case .unknown:

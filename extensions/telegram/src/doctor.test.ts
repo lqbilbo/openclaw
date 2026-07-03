@@ -1,3 +1,4 @@
+// Telegram tests cover doctor plugin behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,12 +6,14 @@ import {
   collectTelegramApiRootWarnings,
   collectTelegramEmptyAllowlistExtraWarnings,
   collectTelegramGroupPolicyWarnings,
+  collectTelegramMalformedGroupsWarnings,
   collectTelegramMissingEnvTokenWarnings,
   collectTelegramSelectedQuoteToolProgressWarnings,
   maybeRepairTelegramApiRoots,
   maybeRepairTelegramAllowFromUsernames,
   scanTelegramBotEndpointApiRoots,
   scanTelegramInvalidAllowFromEntries,
+  scanTelegramMalformedGroupsConfig,
   scanTelegramSelectedQuoteToolProgressWarnings,
   telegramDoctor,
 } from "./doctor.js";
@@ -156,6 +159,183 @@ describe("telegram doctor", () => {
     ).toEqual(["Moved channels.telegram.streamMode → channels.telegram.streaming.mode (block)."]);
   });
 
+  it("removes retired DM thread reply policy keys", () => {
+    const normalize = telegramDoctor.normalizeCompatibilityConfig;
+    if (!normalize) {
+      throw new Error("expected telegram compatibility normalizer");
+    }
+
+    const result = normalize({
+      cfg: {
+        channels: {
+          telegram: {
+            dm: { threadReplies: "inbound" },
+            direct: {
+              "123": { threadReplies: "always", requireTopic: true },
+            },
+            accounts: {
+              work: {
+                dm: { threadReplies: "off" },
+                direct: {
+                  "456": { threadReplies: "inbound", systemPrompt: "Support" },
+                },
+              },
+            },
+          },
+        },
+      } as never,
+    });
+
+    const telegram = result.config.channels?.telegram;
+    expect(telegram?.dm).toBeUndefined();
+    expect(telegram?.direct?.["123"]).toEqual({ requireTopic: true });
+    expect(telegram?.accounts?.work?.dm).toBeUndefined();
+    expect(telegram?.accounts?.work?.direct?.["456"]).toEqual({ systemPrompt: "Support" });
+    expect(result.changes).toEqual([
+      "Removed channels.telegram.dm.threadReplies; DM topic sessions now follow Telegram getMe.has_topics_enabled.",
+      "Removed channels.telegram.direct.123.threadReplies; DM topic sessions now follow Telegram getMe.has_topics_enabled.",
+      "Removed channels.telegram.accounts.work.dm.threadReplies; DM topic sessions now follow Telegram getMe.has_topics_enabled.",
+      "Removed channels.telegram.accounts.work.direct.456.threadReplies; DM topic sessions now follow Telegram getMe.has_topics_enabled.",
+    ]);
+  });
+
+  it("removes empty retired DM policy stanzas", () => {
+    const normalize = telegramDoctor.normalizeCompatibilityConfig;
+    if (!normalize) {
+      throw new Error("expected telegram compatibility normalizer");
+    }
+
+    const result = normalize({
+      cfg: {
+        channels: {
+          telegram: {
+            dm: {},
+            accounts: {
+              work: {
+                dm: {},
+              },
+            },
+          },
+        },
+      } as never,
+    });
+
+    const telegram = result.config.channels?.telegram;
+    expect(telegram?.dm).toBeUndefined();
+    expect(telegram?.accounts?.work?.dm).toBeUndefined();
+    expect(result.changes).toEqual([
+      "Removed channels.telegram.dm.",
+      "Removed channels.telegram.accounts.work.dm.",
+    ]);
+  });
+
+  it("removes retired native draft preview keys", () => {
+    const normalize = telegramDoctor.normalizeCompatibilityConfig;
+    if (!normalize) {
+      throw new Error("expected telegram compatibility normalizer");
+    }
+
+    const result = normalize({
+      cfg: {
+        channels: {
+          telegram: {
+            streaming: {
+              mode: "partial",
+              preview: {
+                toolProgress: true,
+                nativeToolProgress: true,
+                nativeToolProgressAllowFrom: ["123"],
+              },
+            },
+            accounts: {
+              work: {
+                streaming: {
+                  preview: {
+                    nativeToolProgress: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      } as never,
+    });
+
+    const telegram = result.config.channels?.telegram;
+    expect(telegram?.streaming).toEqual({
+      mode: "partial",
+      preview: {
+        toolProgress: true,
+      },
+    });
+    expect(telegram?.accounts?.work?.streaming).toBeUndefined();
+    expect(result.changes).toEqual([
+      "Removed channels.telegram.streaming.preview native draft keys; Telegram previews now use rich send/edit messages.",
+      "Removed channels.telegram.accounts.work.streaming.preview native draft keys; Telegram previews now use rich send/edit messages.",
+    ]);
+  });
+
+  it("removes retired group history context mode keys", () => {
+    expect(
+      telegramDoctor.legacyConfigRules?.some((rule) =>
+        rule.match?.(
+          {
+            includeGroupHistoryContext: "mention-only",
+          },
+          {},
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      telegramDoctor.legacyConfigRules?.some((rule) =>
+        rule.match?.(
+          {
+            work: { includeGroupHistoryContext: "none" },
+          },
+          {},
+        ),
+      ),
+    ).toBe(true);
+
+    const normalize = telegramDoctor.normalizeCompatibilityConfig;
+    if (!normalize) {
+      throw new Error("expected telegram compatibility normalizer");
+    }
+
+    const result = normalize({
+      cfg: {
+        channels: {
+          telegram: {
+            includeGroupHistoryContext: "none",
+            historyLimit: 12,
+            accounts: {
+              work: {
+                includeGroupHistoryContext: "none",
+                historyLimit: 4,
+              },
+              ops: {
+                includeGroupHistoryContext: "recent",
+              },
+            },
+          },
+        },
+      } as never,
+    });
+
+    const telegram = result.config.channels?.telegram;
+    expect(Object.hasOwn(telegram ?? {}, "includeGroupHistoryContext")).toBe(false);
+    expect(telegram?.historyLimit).toBe(0);
+    expect(Object.hasOwn(telegram?.accounts?.work ?? {}, "includeGroupHistoryContext")).toBe(false);
+    expect(telegram?.accounts?.work?.historyLimit).toBe(0);
+    expect(Object.hasOwn(telegram?.accounts?.ops ?? {}, "includeGroupHistoryContext")).toBe(false);
+    expect(telegram?.accounts?.ops?.historyLimit).toBe(12);
+    expect(result.changes).toEqual([
+      "Removed channels.telegram.includeGroupHistoryContext and set historyLimit to 0; Telegram group history is always on for groups and bounded by historyLimit.",
+      "Removed channels.telegram.accounts.work.includeGroupHistoryContext and set historyLimit to 0; Telegram group history is always on for groups and bounded by historyLimit.",
+      "Removed channels.telegram.accounts.ops.includeGroupHistoryContext and set historyLimit to 12; Telegram group history is always on for groups and bounded by historyLimit.",
+    ]);
+  });
+
   it("finds invalid allowFrom entries across scopes", () => {
     const hits = scanTelegramInvalidAllowFromEntries({
       channels: {
@@ -204,6 +384,42 @@ describe("telegram doctor", () => {
         prefix: "channels.telegram",
       }),
     ).toHaveLength(1);
+  });
+
+  it("warns when Telegram groups use a non-object shape", async () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          groups: ["-1001234567890"],
+          accounts: {
+            work: {
+              groups: null,
+            },
+          },
+        },
+      },
+    } as unknown as OpenClawConfig;
+
+    const hits = scanTelegramMalformedGroupsConfig(cfg);
+    expect(hits).toEqual([
+      { path: "channels.telegram.groups", actualType: "array" },
+      { path: "channels.telegram.accounts.work.groups", actualType: "null" },
+    ]);
+
+    const warnings = collectTelegramMalformedGroupsWarnings({
+      hits,
+      doctorFixCommand: "openclaw doctor --fix",
+    });
+    expect(warnings[0]).toContain("object map keyed by Telegram group/chat id");
+    expect(warnings[1]).toContain('channels.telegram.groups."-1001234567890".topics."99"');
+    expect(warnings[1]).toContain("openclaw doctor --fix");
+
+    expect(
+      await telegramDoctor.collectPreviewWarnings?.({
+        cfg,
+        doctorFixCommand: "openclaw doctor --fix",
+      }),
+    ).toEqual(expect.arrayContaining(warnings));
   });
 
   it("repairs @username entries to numeric ids", async () => {
@@ -343,7 +559,7 @@ describe("telegram doctor", () => {
 
     const warnings = collectTelegramSelectedQuoteToolProgressWarnings({ hits });
     expect(warnings[0]).toContain("selected quote replies");
-    expect(warnings[0]).toContain('"Working..." tool-progress preview');
+    expect(warnings[0]).toContain('"Working" tool-progress preview');
     expect(warnings[0]).toContain("Current-message replies without selected quote text");
     expect(warnings[1]).toContain("streaming.preview.toolProgress: false");
     const collectedWarnings = await telegramDoctor.collectPreviewWarnings?.({

@@ -1,16 +1,19 @@
+// Implements steer commands that persist per-session agent guidance.
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,
 } from "../../agents/tools/sessions-helpers.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
-import { normalizeOptionalString } from "../../shared/string-coerce.js";
+import { isNativeCommandTurn, resolveCommandTurnContext } from "../command-turn-context.js";
 import { rejectUnauthorizedCommand } from "./command-gates.js";
 import {
-  formatEmbeddedPiQueueFailureSummary,
-  isEmbeddedPiRunActive,
-  queueEmbeddedPiMessageWithOutcomeAsync,
+  formatEmbeddedAgentQueueFailureSummary,
+  isEmbeddedAgentRunActive,
+  queueEmbeddedAgentMessageWithOutcomeAsync,
   resolveActiveEmbeddedRunSessionId,
+  resolveActiveEmbeddedRunSessionIdBySessionFile,
 } from "./commands-steer.runtime.js";
 import type {
   CommandHandler,
@@ -31,10 +34,9 @@ function parseSteerMessage(raw: string): string | null {
 function resolveSteerTargetSessionKey(params: HandleCommandsParams): string | undefined {
   const commandTarget = normalizeOptionalString(params.ctx.CommandTargetSessionKey);
   const commandSession = normalizeOptionalString(params.sessionKey);
-  const raw =
-    params.ctx.CommandSource === "native"
-      ? commandTarget || commandSession
-      : commandSession || commandTarget;
+  const raw = isNativeCommandTurn(resolveCommandTurnContext(params.ctx))
+    ? commandTarget || commandSession
+    : commandSession || commandTarget;
   if (!raw) {
     return undefined;
   }
@@ -56,21 +58,50 @@ function resolveStoredSessionEntry(
   return undefined;
 }
 
+function listSteerCandidateSessionKeys(targetSessionKey: string): string[] {
+  const candidates = [targetSessionKey];
+  if (targetSessionKey.includes(":slash:")) {
+    candidates.push(
+      targetSessionKey.replace(":slash:", ":direct:"),
+      targetSessionKey.replace(":slash:", ":dm:"),
+    );
+  }
+  return [...new Set(candidates)];
+}
+
 function resolveSteerSessionId(params: {
   commandParams: HandleCommandsParams;
   targetSessionKey: string;
 }): string | undefined {
-  const activeSessionId = resolveActiveEmbeddedRunSessionId(params.targetSessionKey);
-  if (activeSessionId) {
-    return activeSessionId;
+  const candidateKeys = listSteerCandidateSessionKeys(params.targetSessionKey);
+  for (const candidateKey of candidateKeys) {
+    const activeSessionId = resolveActiveEmbeddedRunSessionId(candidateKey);
+    if (activeSessionId) {
+      return activeSessionId;
+    }
   }
 
-  const entry = resolveStoredSessionEntry(params.commandParams, params.targetSessionKey);
-  const sessionId = normalizeOptionalString(entry?.sessionId);
-  if (!sessionId || !isEmbeddedPiRunActive(sessionId)) {
-    return undefined;
+  for (const candidateKey of candidateKeys) {
+    const entry = resolveStoredSessionEntry(params.commandParams, candidateKey);
+    const sessionFile = normalizeOptionalString(entry?.sessionFile);
+    if (!sessionFile) {
+      continue;
+    }
+    const activeSessionId = resolveActiveEmbeddedRunSessionIdBySessionFile(sessionFile);
+    if (activeSessionId) {
+      return activeSessionId;
+    }
   }
-  return sessionId;
+
+  for (const candidateKey of candidateKeys) {
+    const entry = resolveStoredSessionEntry(params.commandParams, candidateKey);
+    const sessionId = normalizeOptionalString(entry?.sessionId);
+    if (sessionId && isEmbeddedAgentRunActive(sessionId)) {
+      return sessionId;
+    }
+  }
+
+  return undefined;
 }
 
 function applySteerFallbackPrompt(ctx: HandleCommandsParams["ctx"], message: string): void {
@@ -139,7 +170,7 @@ export const handleSteerCommand: CommandHandler = async (params, allowTextComman
     );
   }
 
-  const queueOutcome = await queueEmbeddedPiMessageWithOutcomeAsync(sessionId, message, {
+  const queueOutcome = await queueEmbeddedAgentMessageWithOutcomeAsync(sessionId, message, {
     steeringMode: "all",
     debounceMs: 0,
   }).catch((err: unknown): CommandHandlerResult => {
@@ -153,7 +184,7 @@ export const handleSteerCommand: CommandHandler = async (params, allowTextComman
     return queueOutcome;
   }
   if (!queueOutcome.queued) {
-    const summary = formatEmbeddedPiQueueFailureSummary(queueOutcome);
+    const summary = formatEmbeddedAgentQueueFailureSummary(queueOutcome);
     return continueWithSteerFallback(
       params,
       message,

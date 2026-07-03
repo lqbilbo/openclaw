@@ -1,13 +1,15 @@
+// Qa Lab plugin module implements qa transport behavior.
 import { setTimeout as sleep } from "node:timers/promises";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
 import type { QaProviderMode } from "./model-selection.js";
 import { extractQaFailureReplyText } from "./reply-failure.js";
 import type {
   QaBusInboundMessageInput,
   QaBusMessage,
   QaBusOutboundMessageInput,
-  QaBusSearchMessagesInput,
   QaBusReadMessageInput,
+  QaBusSearchMessagesInput,
   QaBusStateSnapshot,
   QaBusWaitForInput,
 } from "./runtime-api.js";
@@ -30,6 +32,7 @@ export type QaTransportReportParams = {
   alternateModel: string;
   fastMode: boolean;
   concurrency: number;
+  isolatedWorkers?: boolean;
 };
 
 export type QaTransportGatewayConfig = Pick<OpenClawConfig, "channels" | "messages">;
@@ -53,7 +56,28 @@ type QaTransportFailureAssertionOptions = {
   cursorSpace?: QaTransportFailureCursorSpace;
 };
 
-type QaTransportCommonCapabilities = {
+export type QaTransportOutboundMatch = {
+  conversation?: QaBusInboundMessageInput["conversation"];
+  senderId?: string;
+  sinceIndex?: number;
+  textIncludes?: string;
+  threadId?: string;
+  timeoutMs?: number;
+};
+
+export type QaTransportWaitForNoOutboundInput = {
+  quietMs?: number;
+  sinceIndex?: number;
+};
+
+export type QaTransportNativeCommandInput = Omit<
+  QaBusInboundMessageInput,
+  "nativeCommand" | "text"
+> & {
+  command: string;
+};
+
+export type QaTransportCapabilities = {
   sendInboundMessage: QaTransportState["addInboundMessage"];
   injectOutboundMessage: QaTransportState["addOutboundMessage"];
   waitForOutboundMessage: (input: QaBusWaitForInput) => Promise<unknown>;
@@ -84,13 +108,18 @@ export async function waitForQaTransportCondition<T>(
   timeoutMs = 15_000,
   intervalMs = 100,
 ): Promise<T> {
+  const pollIntervalMs = resolveTimerTimeoutMs(intervalMs, 100, 0);
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const value = await check();
     if (value !== null && value !== undefined) {
       return value;
     }
-    await sleep(intervalMs);
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) {
+      break;
+    }
+    await sleep(Math.min(pollIntervalMs, remainingMs));
   }
   throw new Error(`timed out after ${timeoutMs}ms`);
 }
@@ -154,8 +183,14 @@ export type QaTransportAdapter = {
   label: string;
   accountId: string;
   requiredPluginIds: readonly string[];
+  supportedActions: readonly QaTransportActionName[];
   state: QaTransportState;
-  capabilities: QaTransportCommonCapabilities;
+  capabilities: QaTransportCapabilities;
+  reset: () => Promise<void>;
+  sendInbound: (input: QaBusInboundMessageInput) => Promise<QaBusMessage>;
+  sendNativeCommand: (input: QaTransportNativeCommandInput) => Promise<void>;
+  waitForNoOutbound: (input?: QaTransportWaitForNoOutboundInput) => Promise<void>;
+  waitForOutbound: (input: QaTransportOutboundMatch) => Promise<QaBusMessage>;
   createGatewayConfig: (params: { baseUrl: string }) => QaTransportGatewayConfig;
   waitReady: (params: {
     gateway: QaTransportGatewayClient;
@@ -164,9 +199,11 @@ export type QaTransportAdapter = {
   }) => Promise<void>;
   buildAgentDelivery: (params: { target: string }) => {
     channel: string;
+    to?: string;
     replyChannel: string;
     replyTo: string;
   };
+  createRuntimeEnvPatch?: () => NodeJS.ProcessEnv;
   handleAction: (params: {
     action: QaTransportActionName;
     args: Record<string, unknown>;
@@ -174,6 +211,7 @@ export type QaTransportAdapter = {
     accountId?: string | null;
   }) => Promise<unknown>;
   createReportNotes: (params: QaTransportReportParams) => string[];
+  cleanup?: () => Promise<void>;
 };
 
 export abstract class QaStateBackedTransportAdapter implements QaTransportAdapter {
@@ -181,20 +219,23 @@ export abstract class QaStateBackedTransportAdapter implements QaTransportAdapte
   readonly label: string;
   readonly accountId: string;
   readonly requiredPluginIds: readonly string[];
+  readonly supportedActions: readonly QaTransportActionName[];
   readonly state: QaTransportState;
-  readonly capabilities: QaTransportCommonCapabilities;
+  readonly capabilities: QaTransportCapabilities;
 
   protected constructor(params: {
     id: string;
     label: string;
     accountId: string;
     requiredPluginIds: readonly string[];
+    supportedActions?: readonly QaTransportActionName[];
     state: QaTransportState;
   }) {
     this.id = params.id;
     this.label = params.label;
     this.accountId = params.accountId;
     this.requiredPluginIds = params.requiredPluginIds;
+    this.supportedActions = params.supportedActions ?? [];
     this.state = params.state;
     this.capabilities = {
       sendInboundMessage: this.state.addInboundMessage.bind(this.state),
@@ -205,8 +246,8 @@ export abstract class QaStateBackedTransportAdapter implements QaTransportAdapte
         await this.state.reset();
       },
       readNormalizedMessage: this.state.readMessage.bind(this.state),
-      executeGenericAction: (params) => this.handleAction(params),
-      waitForReady: (params) => this.waitReady(params),
+      executeGenericAction: (paramsValue) => this.handleAction(paramsValue),
+      waitForReady: (paramsLocal) => this.waitReady(paramsLocal),
       waitForCondition: createFailureAwareTransportWaitForCondition(this.state),
       assertNoFailureReplies: (options) => {
         assertNoFailureReplies(this.state, options);
@@ -222,6 +263,7 @@ export abstract class QaStateBackedTransportAdapter implements QaTransportAdapte
   }) => Promise<void>;
   abstract buildAgentDelivery: (params: { target: string }) => {
     channel: string;
+    to?: string;
     replyChannel: string;
     replyTo: string;
   };
@@ -232,4 +274,61 @@ export abstract class QaStateBackedTransportAdapter implements QaTransportAdapte
     accountId?: string | null;
   }) => Promise<unknown>;
   abstract createReportNotes: (params: QaTransportReportParams) => string[];
+
+  async reset() {
+    await this.state.reset();
+  }
+
+  async sendInbound(input: QaBusInboundMessageInput) {
+    return await this.state.addInboundMessage(input);
+  }
+
+  async sendNativeCommand(_input: QaTransportNativeCommandInput): Promise<void> {
+    throw new Error(`${this.label} does not support native commands.`);
+  }
+
+  async waitForNoOutbound(input: QaTransportWaitForNoOutboundInput = {}) {
+    const quietMs = resolveTimerTimeoutMs(input.quietMs, 1_200, 0);
+    await sleep(quietMs);
+    assertNoFailureReplies(this.state, {
+      sinceIndex: input.sinceIndex,
+      cursorSpace: "outbound",
+    });
+    const observed = this.outboundSince(input.sinceIndex);
+    if (observed.length > 0) {
+      const summary = observed.map((message) => `${message.id}:${message.text}`).join("\n");
+      throw new Error(`expected no outbound messages for ${quietMs}ms, saw:\n${summary}`);
+    }
+  }
+
+  async waitForOutbound(input: QaTransportOutboundMatch) {
+    return await waitForQaTransportCondition(() => {
+      assertNoFailureReplies(this.state, {
+        sinceIndex: input.sinceIndex,
+        cursorSpace: "outbound",
+      });
+      return this.outboundSince(input.sinceIndex).find((message) => {
+        if (input.conversation && message.conversation.id !== input.conversation.id) {
+          return false;
+        }
+        if (input.conversation && message.conversation.kind !== input.conversation.kind) {
+          return false;
+        }
+        if (input.senderId && message.senderId !== input.senderId) {
+          return false;
+        }
+        if (input.threadId && message.threadId !== input.threadId) {
+          return false;
+        }
+        return !input.textIncludes || message.text.includes(input.textIncludes);
+      });
+    }, input.timeoutMs);
+  }
+
+  private outboundSince(sinceIndex = 0) {
+    return this.state
+      .getSnapshot()
+      .messages.filter((message) => message.direction === "outbound")
+      .slice(sinceIndex);
+  }
 }

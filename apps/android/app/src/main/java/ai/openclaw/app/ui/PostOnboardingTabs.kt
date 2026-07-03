@@ -68,6 +68,7 @@ private enum class StatusVisual {
   Offline,
 }
 
+/** Legacy tab scaffold used by the mobile post-onboarding experience. */
 @Composable
 fun PostOnboardingTabs(
   viewModel: MainViewModel,
@@ -103,14 +104,13 @@ fun PostOnboardingTabs(
     }
   }
 
-  val statusText by viewModel.statusText.collectAsState()
-  val isConnected by viewModel.isConnected.collectAsState()
+  val gatewayConnectionDisplay by viewModel.gatewayConnectionDisplay.collectAsState()
 
   val statusVisual =
-    remember(statusText, isConnected) {
-      val lower = statusText.lowercase()
+    remember(gatewayConnectionDisplay) {
+      val lower = gatewayConnectionDisplay.statusText.lowercase()
       when {
-        isConnected -> StatusVisual.Connected
+        gatewayConnectionDisplay.isConnected -> StatusVisual.Connected
         lower.contains("connecting") || lower.contains("reconnecting") -> StatusVisual.Connecting
         lower.contains("pairing") || lower.contains("approval") || lower.contains("auth") -> StatusVisual.Warning
         lower.contains("error") || lower.contains("failed") -> StatusVisual.Error
@@ -128,7 +128,7 @@ fun PostOnboardingTabs(
     contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       TopStatusBar(
-        statusText = statusText,
+        statusText = gatewayConnectionDisplay.statusText,
         statusVisual = statusVisual,
       )
     },
@@ -150,6 +150,8 @@ fun PostOnboardingTabs(
           .background(mobileBackgroundGradient),
     ) {
       if (chatTabStarted) {
+        // Keep chat mounted after first use so session state and scroll position
+        // survive tab switches.
         Box(
           modifier =
             Modifier
@@ -162,6 +164,8 @@ fun PostOnboardingTabs(
       }
 
       if (screenTabStarted) {
+        // Canvas can be expensive to initialize; keep it mounted once visited
+        // and hide it by alpha/z-order instead of destroying the view tree.
         ScreenTabScreen(
           viewModel = viewModel,
           visible = activeTab == HomeTab.Screen,
@@ -184,6 +188,7 @@ fun PostOnboardingTabs(
   }
 }
 
+/** Screen tab wrapper that refreshes canvas data once per gateway connection. */
 @Composable
 private fun ScreenTabScreen(
   viewModel: MainViewModel,
@@ -205,6 +210,7 @@ private fun ScreenTabScreen(
   }
 }
 
+/** Top status chip derived from gateway connection text. */
 @Composable
 private fun TopStatusBar(
   statusText: String,
@@ -295,6 +301,7 @@ private fun TopStatusBar(
   }
 }
 
+/** Bottom navigation for the legacy tab scaffold. */
 @Composable
 private fun BottomTabBar(
   activeTab: HomeTab,

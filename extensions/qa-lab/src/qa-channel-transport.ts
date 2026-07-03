@@ -1,13 +1,16 @@
+// Qa Lab plugin module implements qa channel transport behavior.
 import { setTimeout as sleep } from "node:timers/promises";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { QaBusState } from "./bus-state.js";
+import { QaSuiteInfraError } from "./errors.js";
 import { getQaProvider } from "./providers/index.js";
 import { QaStateBackedTransportAdapter } from "./qa-transport.js";
 import type {
   QaTransportActionName,
   QaTransportGatewayConfig,
   QaTransportGatewayClient,
+  QaTransportNativeCommandInput,
   QaTransportReportParams,
 } from "./qa-transport.js";
 import { qaChannelPlugin } from "./runtime-api.js";
@@ -64,7 +67,8 @@ async function waitForQaChannelReady(params: {
     await sleep(pollIntervalMs);
   }
 
-  throw new Error(
+  throw new QaSuiteInfraError(
+    "transport_ready_timeout",
     [
       `timed out after ${timeoutMs}ms waiting for qa-channel ready`,
       `last status: ${lastAccountStatus}`,
@@ -88,6 +92,7 @@ export function createQaChannelGatewayConfig(params: {
       },
     },
     messages: {
+      visibleReplies: "automatic",
       groupChat: {
         mentionPatterns: ["\\b@?openclaw\\b"],
         visibleReplies: "automatic",
@@ -102,7 +107,7 @@ function createQaChannelReportNotes(params: QaTransportReportParams) {
     provider.kind === "mock"
       ? `Runs against qa-channel + qa-lab bus + real gateway child + ${params.providerMode} provider.`
       : `Runs against qa-channel + qa-lab bus + real gateway child + live frontier models (${params.primaryModel}, ${params.alternateModel})${params.fastMode ? " with fast mode enabled" : ""}.`,
-    params.concurrency > 1
+    params.isolatedWorkers === true
       ? `Scenarios run in isolated gateway workers with concurrency ${params.concurrency}.`
       : "Scenarios run serially in one gateway worker.",
     "Cron uses a one-minute schedule assertion plus forced execution for fast verification.",
@@ -131,6 +136,7 @@ class QaChannelTransport extends QaStateBackedTransportAdapter {
       label: "qa-channel + qa-lab bus",
       accountId: QA_CHANNEL_ACCOUNT_ID,
       requiredPluginIds: QA_CHANNEL_REQUIRED_PLUGIN_IDS,
+      supportedActions: ["delete", "edit", "react", "thread-create"],
       state,
     });
   }
@@ -142,6 +148,14 @@ class QaChannelTransport extends QaStateBackedTransportAdapter {
     replyChannel: QA_CHANNEL_ID,
     replyTo: target,
   });
+  override async sendNativeCommand(input: QaTransportNativeCommandInput): Promise<void> {
+    const { command, ...message } = input;
+    await this.sendInbound({
+      ...message,
+      text: `/${command}`,
+      nativeCommand: { name: command },
+    });
+  }
   handleAction = handleQaChannelAction;
   createReportNotes = createQaChannelReportNotes;
 }

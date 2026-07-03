@@ -1,10 +1,14 @@
+/** Resolves session rollover and carried state for isolated cron runs. */
 import crypto from "node:crypto";
 import { clearBootstrapSnapshotOnSessionRollover } from "../../agents/bootstrap-cache.js";
+import { hasProviderOwnedSession } from "../../config/sessions/entry-freshness.js";
 import { resolveSessionLifecycleTimestamps } from "../../config/sessions/lifecycle.js";
+import { hasSessionAutoModelFallbackProvenance } from "../../config/sessions/model-override-provenance.js";
 import { resolveStorePath } from "../../config/sessions/paths.js";
 import {
   evaluateSessionFreshness,
   resolveSessionResetPolicy,
+  type SessionFreshness,
 } from "../../config/sessions/reset-policy.js";
 import { loadSessionStore } from "../../config/sessions/store-load.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
@@ -59,7 +63,9 @@ function copySessionFields(
 }
 
 function preserveNonAutoModelOverride(target: SessionEntry, entry: SessionEntry): void {
-  if (entry.modelOverrideSource !== "auto") {
+  const recoveredAutoFallbackOverride =
+    entry.modelOverrideSource === undefined && hasSessionAutoModelFallbackProvenance(entry);
+  if (entry.modelOverrideSource !== "auto" && !recoveredAutoFallbackOverride) {
     if (entry.modelOverride !== undefined) {
       target.modelOverride = entry.modelOverride;
     }
@@ -100,6 +106,7 @@ function sanitizeFreshCronSessionEntry(
   return next;
 }
 
+/** Resolves or rolls over the cron session entry for one isolated-agent run. */
 export function resolveCronSession(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
@@ -115,42 +122,41 @@ export function resolveCronSession(params: {
   const store = params.store ?? loadSessionStore(storePath);
   const entry = store[params.sessionKey];
 
-  // Check if we can reuse an existing session
   let sessionId: string;
   let isNewSession: boolean;
   let systemSent: boolean;
 
   if (!params.forceNew && entry?.sessionId) {
-    // Evaluate freshness using the configured reset policy
-    // Cron/webhook sessions use "direct" reset type (1:1 conversation style)
+    // Cron/webhook sessions follow the direct reset policy so scheduled turns
+    // roll over like 1:1 conversations rather than long-lived group contexts.
     const resetPolicy = resolveSessionResetPolicy({
       sessionCfg,
       resetType: "direct",
     });
-    const freshness = evaluateSessionFreshness({
-      updatedAt: entry.updatedAt,
-      ...resolveSessionLifecycleTimestamps({
-        entry,
-        agentId: params.agentId,
-        storePath,
-      }),
-      now: params.nowMs,
-      policy: resetPolicy,
-    });
+    const skipImplicitExpiry = resetPolicy.configured !== true && hasProviderOwnedSession(entry);
+    const freshness = skipImplicitExpiry
+      ? ({ fresh: true } satisfies SessionFreshness)
+      : evaluateSessionFreshness({
+          updatedAt: entry.updatedAt,
+          ...resolveSessionLifecycleTimestamps({
+            entry,
+            agentId: params.agentId,
+            storePath,
+          }),
+          now: params.nowMs,
+          policy: resetPolicy,
+        });
 
     if (freshness.fresh) {
-      // Reuse existing session
       sessionId = entry.sessionId;
       isNewSession = false;
       systemSent = entry.systemSent ?? false;
     } else {
-      // Session expired, create new
       sessionId = crypto.randomUUID();
       isNewSession = true;
       systemSent = false;
     }
   } else {
-    // No existing session or forced new
     sessionId = crypto.randomUUID();
     isNewSession = true;
     systemSent = false;
@@ -169,9 +175,9 @@ export function resolveCronSession(params: {
     : undefined;
 
   const sessionEntry: SessionEntry = {
-    // Preserve existing per-session overrides even when rolling to a new sessionId.
+    // Fresh cron sessions keep user preference/auth overrides but drop resume
+    // handles and auto-fallback model overrides that belong to the old run.
     ...baseEntry,
-    // Always update these core fields
     sessionId,
     updatedAt: params.nowMs,
     sessionStartedAt: isNewSession

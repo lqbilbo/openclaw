@@ -1,16 +1,19 @@
+// Discord plugin module implements outbound adapter behavior.
+import type { OutboundIdentity } from "openclaw/plugin-sdk/channel-outbound";
+import { resolveOutboundSendDep } from "openclaw/plugin-sdk/channel-outbound";
 import {
   type ChannelOutboundAdapter,
   createAttachedChannelResultAdapter,
 } from "openclaw/plugin-sdk/channel-send-result";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
-import type { OutboundIdentity } from "openclaw/plugin-sdk/outbound-runtime";
-import { resolveOutboundSendDep } from "openclaw/plugin-sdk/outbound-send-deps";
+import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import {
   normalizeOptionalString,
   normalizeOptionalStringifiedId,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { chunkDiscordTextWithMode } from "./chunk.js";
 import { withDiscordDeliveryRetry } from "./delivery-retry.js";
+import { notifyDiscordInboundEventOutboundPayloadSuccess } from "./inbound-event-delivery.js";
 import { isLikelyDiscordVideoMedia } from "./media-detection.js";
 import type { ThreadBindingRecord } from "./monitor/thread-bindings.js";
 import { normalizeDiscordOutboundTarget } from "./normalize.js";
@@ -40,14 +43,9 @@ function stripDiscordInternalRuntimeScaffolding(text: string): string {
     .replace(DISCORD_INTERNAL_RUNTIME_SCAFFOLDING_TAG_RE, "");
 }
 
-type DiscordThreadBindingsModule = typeof import("./monitor/thread-bindings.js");
-
-let discordThreadBindingsPromise: Promise<DiscordThreadBindingsModule> | undefined;
-
-function loadDiscordThreadBindings(): Promise<DiscordThreadBindingsModule> {
-  discordThreadBindingsPromise ??= import("./monitor/thread-bindings.js");
-  return discordThreadBindingsPromise;
-}
+const loadDiscordThreadBindings = createLazyRuntimeModule(
+  () => import("./monitor/thread-bindings.js"),
+);
 
 function resolveDiscordWebhookIdentity(params: {
   identity?: OutboundIdentity;
@@ -119,11 +117,31 @@ export const discordOutbound: ChannelOutboundAdapter = {
     selects: true,
     context: true,
     divider: true,
+    limits: {
+      actions: {
+        maxActions: 25,
+        maxActionsPerRow: 5,
+        maxRows: 5,
+        maxLabelLength: 80,
+        supportsDisabled: true,
+      },
+      selects: {
+        maxOptions: 25,
+        maxLabelLength: 100,
+        maxValueBytes: 100,
+      },
+      text: {
+        maxLength: DISCORD_TEXT_CHUNK_LIMIT,
+        encoding: "characters",
+        markdownDialect: "discord-markdown",
+      },
+    },
   },
   deliveryCapabilities: {
     durableFinal: {
       text: true,
       media: true,
+      poll: true,
       payload: true,
       silent: true,
       replyTo: true,
@@ -287,7 +305,12 @@ export const discordOutbound: ChannelOutboundAdapter = {
           }),
       }),
   }),
-  afterDeliverPayload: async ({ target }) => {
+  afterDeliverPayload: async ({ target, payload }) => {
+    notifyDiscordInboundEventOutboundPayloadSuccess({
+      payload,
+      to: resolveDiscordOutboundTarget({ to: target.to, threadId: target.threadId }),
+      accountId: target.accountId,
+    });
     const threadId = normalizeOptionalStringifiedId(target.threadId);
     if (!threadId) {
       return;

@@ -1,3 +1,4 @@
+// Qa Lab tests cover qa channel transport plugin behavior.
 import { describe, expect, it, vi } from "vitest";
 import { createQaBusState } from "./bus-state.js";
 import { createQaChannelTransport } from "./qa-channel-transport.js";
@@ -22,6 +23,7 @@ describe("qa channel transport", () => {
         },
       },
       messages: {
+        visibleReplies: "automatic",
         groupChat: {
           mentionPatterns: ["\\b@?openclaw\\b"],
           visibleReplies: "automatic",
@@ -117,6 +119,43 @@ describe("qa channel transport", () => {
     expect(message.text).toBe("hello from the operator");
   });
 
+  it("implements the portable scenario transport actions", async () => {
+    const transport = createQaChannelTransport(createQaBusState());
+    const conversation = { id: "alice", kind: "direct" as const };
+
+    await transport.sendInbound({
+      conversation,
+      senderId: "alice",
+      text: "hello",
+    });
+    await transport.state.addOutboundMessage({
+      to: "dm:alice",
+      text: "QA-PORTABLE-OK",
+    });
+
+    await expect(
+      transport.waitForOutbound({ conversation, textIncludes: "QA-PORTABLE-OK" }),
+    ).resolves.toMatchObject({ text: "QA-PORTABLE-OK" });
+    await transport.reset();
+    expect(transport.state.getSnapshot().messages).toEqual([]);
+  });
+
+  it("injects native commands with transport metadata", async () => {
+    const transport = createQaChannelTransport(createQaBusState());
+
+    await transport.sendNativeCommand({
+      command: "stop",
+      conversation: { id: "alice", kind: "direct" },
+      senderId: "alice",
+    });
+
+    const [message] = transport.state.getSnapshot().messages;
+    expect(message).toMatchObject({
+      text: "/stop",
+      nativeCommand: { name: "stop" },
+    });
+  });
+
   it("inherits the shared failure-aware wait helper", async () => {
     const transport = createQaChannelTransport(createQaBusState());
     let injected = false;
@@ -152,5 +191,13 @@ describe("qa channel transport", () => {
     await expect(transport.capabilities.waitForCondition(async () => "ok", 50, 10)).resolves.toBe(
       "ok",
     );
+  });
+
+  it("keeps oversized wait helper intervals within the timeout", async () => {
+    const transport = createQaChannelTransport(createQaBusState());
+
+    await expect(
+      transport.capabilities.waitForCondition(async () => undefined, 5, Number.MAX_SAFE_INTEGER),
+    ).rejects.toThrow("timed out after 5ms");
   });
 });

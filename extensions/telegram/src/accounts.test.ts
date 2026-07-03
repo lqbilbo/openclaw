@@ -1,3 +1,4 @@
+// Telegram tests cover accounts plugin behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import * as runtimeEnvModule from "openclaw/plugin-sdk/runtime-env";
 import { withEnv } from "openclaw/plugin-sdk/test-env";
@@ -145,6 +146,76 @@ describe("resolveTelegramAccount", () => {
     expect(accounts.map((account) => account.accountId)).toEqual(["work"]);
     expect(accounts[0]?.token).toBe("tok-work");
   });
+
+  it("keeps the implicit default account when named accounts are added to top-level credentials (#82780)", () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          botToken: "tok-default",
+          accounts: {
+            fusion: {
+              enabled: false,
+              name: "Fusion",
+              botToken: "tok-fusion",
+            },
+          },
+        },
+      },
+      bindings: [{ agentId: "fusion", match: { channel: "telegram", accountId: "fusion" } }],
+    } as unknown as OpenClawConfig;
+
+    expect(listTelegramAccountIds(cfg)).toEqual(["default", "fusion"]);
+    expect(resolveDefaultTelegramAccountId(cfg)).toBe("default");
+    expectNoMissingDefaultWarning();
+
+    const accounts = listEnabledTelegramAccounts(cfg);
+    expect(accounts.map((account) => account.accountId)).toEqual(["default"]);
+    expect(accounts[0]?.token).toBe("tok-default");
+    expect(accounts[0]?.tokenSource).toBe("config");
+  });
+
+  it("routes omitted-account resolution through the configured defaultAccount (#61012)", () => {
+    const account = resolveAccountWithEnv(
+      { TELEGRAM_BOT_TOKEN: "tok-env" },
+      {
+        channels: {
+          telegram: {
+            botToken: "tok-top-level",
+            defaultAccount: "secondary",
+            accounts: {
+              primary: { botToken: "tok-primary" },
+              secondary: { botToken: "tok-secondary" },
+            },
+          },
+        },
+      },
+    );
+    expect(account.accountId).toBe("secondary");
+    expect(account.token).toBe("tok-secondary");
+    expect(account.tokenSource).toBe("config");
+  });
+
+  it("keeps explicit accountId ahead of the configured defaultAccount (#61012)", () => {
+    const account = resolveAccountWithEnv(
+      { TELEGRAM_BOT_TOKEN: "tok-env" },
+      {
+        channels: {
+          telegram: {
+            botToken: "tok-top-level",
+            defaultAccount: "secondary",
+            accounts: {
+              primary: { botToken: "tok-primary" },
+              secondary: { botToken: "tok-secondary" },
+            },
+          },
+        },
+      },
+      "primary",
+    );
+    expect(account.accountId).toBe("primary");
+    expect(account.token).toBe("tok-primary");
+    expect(account.tokenSource).toBe("config");
+  });
 });
 
 describe("resolveDefaultTelegramAccountId", () => {
@@ -197,6 +268,23 @@ describe("resolveDefaultTelegramAccountId", () => {
     };
 
     resolveDefaultTelegramAccountId(cfg);
+    expectNoMissingDefaultWarning();
+  });
+
+  it("does not warn when explicit defaultAccount is first in multi-account fallback order (#83948)", () => {
+    const cfg: OpenClawConfig = {
+      channels: {
+        telegram: {
+          defaultAccount: "alerts",
+          accounts: {
+            alerts: { botToken: "tok-alerts" },
+            work: { botToken: "tok-work" },
+          },
+        },
+      },
+    };
+
+    expect(resolveDefaultTelegramAccountId(cfg)).toBe("alerts");
     expectNoMissingDefaultWarning();
   });
 

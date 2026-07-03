@@ -1,3 +1,4 @@
+// Device Pair API module exposes the plugin public contract.
 export {
   approveDevicePairing,
   clearDeviceBootstrapTokens,
@@ -13,6 +14,7 @@ export {
   resolveGatewayPort,
   resolveTailnetHostWithRunner,
 } from "openclaw/plugin-sdk/core";
+export { resolveAdvertisedLanHost } from "openclaw/plugin-sdk/gateway-runtime";
 export {
   resolvePreferredOpenClawTmpDir,
   runPluginCommandWithTimeout,

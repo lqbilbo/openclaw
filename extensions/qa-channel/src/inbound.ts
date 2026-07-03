@@ -1,4 +1,6 @@
+// Qa Channel plugin module implements inbound behavior.
 import { resolveStableChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
+import { resolveNativeCommandSessionTargets } from "openclaw/plugin-sdk/command-auth-native";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk/inbound-envelope";
 import {
@@ -6,6 +8,10 @@ import {
   saveMediaBuffer,
   saveMediaSource,
 } from "openclaw/plugin-sdk/media-runtime";
+import {
+  sanitizeQaBusToolCallArguments,
+  type QaBusToolCall,
+} from "openclaw/plugin-sdk/qa-channel-protocol";
 import { buildQaTarget, sendQaBusMessage, type QaBusMessage } from "./bus-client.js";
 import { getQaChannelRuntime } from "./runtime.js";
 import type { CoreConfig, ResolvedQaChannelAccount } from "./types.js";
@@ -19,6 +25,18 @@ export function isHttpMediaUrl(value: string): boolean {
   }
 }
 
+function normalizeBase64ForCompare(value: string): string {
+  return value.replace(/=+$/u, "").replace(/-/gu, "+").replace(/_/gu, "/");
+}
+
+function decodeAttachmentBase64(value: string): Buffer | null {
+  const buffer = Buffer.from(value, "base64");
+  if (normalizeBase64ForCompare(buffer.toString("base64")) !== normalizeBase64ForCompare(value)) {
+    return null;
+  }
+  return buffer;
+}
+
 async function resolveQaInboundMediaPayload(attachments: QaBusMessage["attachments"]) {
   if (!Array.isArray(attachments) || attachments.length === 0) {
     return {};
@@ -29,8 +47,13 @@ async function resolveQaInboundMediaPayload(attachments: QaBusMessage["attachmen
       continue;
     }
     if (typeof attachment.contentBase64 === "string" && attachment.contentBase64.trim()) {
+      const buffer = decodeAttachmentBase64(attachment.contentBase64);
+      if (!buffer) {
+        console.warn("[qa-channel] inbound attachment contentBase64 rejected (invalid base64)");
+        continue;
+      }
       const saved = await saveMediaBuffer(
-        Buffer.from(attachment.contentBase64, "base64"),
+        buffer,
         attachment.mimeType,
         "inbound",
         undefined,
@@ -82,6 +105,7 @@ export async function handleQaInbound(params: {
     conversationId: inbound.conversation.id,
     threadId: inbound.threadId,
   });
+  const toolCalls: QaBusToolCall[] = [];
   const { route, buildEnvelope } = resolveInboundRouteEnvelopeBuilderWithRuntime({
     cfg: params.config as OpenClawConfig,
     channel: params.channelId,
@@ -156,15 +180,26 @@ export async function handleQaInbound(params: {
     body: inbound.text,
   });
   const mediaPayload = await resolveQaInboundMediaPayload(inbound.attachments);
+  const nativeCommand = inbound.nativeCommand;
+  const commandTargets = nativeCommand
+    ? resolveNativeCommandSessionTargets({
+        agentId: route.agentId,
+        sessionPrefix: "qa-channel:slash",
+        userId: inbound.senderId,
+        targetSessionKey: route.sessionKey,
+      })
+    : undefined;
+  const commandBody = nativeCommand ? `/${nativeCommand.name}` : inbound.text;
 
   const ctxPayload = runtime.channel.reply.finalizeInboundContext({
     Body: body,
     BodyForAgent: inbound.text,
     RawBody: inbound.text,
-    CommandBody: inbound.text,
+    CommandBody: commandBody,
     From: target,
     To: target,
-    SessionKey: route.sessionKey,
+    SessionKey: commandTargets?.sessionKey ?? route.sessionKey,
+    CommandTargetSessionKey: commandTargets?.commandTargetSessionKey,
     AccountId: route.accountId ?? params.account.accountId,
     ChatType: inbound.conversation.kind === "direct" ? "direct" : "group",
     WasMentioned: wasMentioned,
@@ -192,10 +227,19 @@ export async function handleQaInbound(params: {
     OriginatingChannel: params.channelId,
     OriginatingTo: target,
     CommandAuthorized: true,
+    CommandSource: nativeCommand ? "native" : undefined,
+    CommandTurn: nativeCommand
+      ? {
+          kind: "native",
+          source: "native",
+          authorized: true,
+          body: commandBody,
+        }
+      : undefined,
     ...mediaPayload,
   });
 
-  await runtime.channel.turn.runAssembled({
+  await runtime.channel.inbound.dispatchReply({
     cfg: params.config as OpenClawConfig,
     channel: params.channelId,
     accountId: params.account.accountId,
@@ -224,12 +268,29 @@ export async function handleQaInbound(params: {
           senderName: params.account.botDisplayName,
           threadId: inbound.threadId,
           replyToId: inbound.id,
+          toolCalls,
         });
       },
       onError: (error) => {
         throw error instanceof Error
           ? error
           : new Error(`qa-channel dispatch failed: ${String(error)}`);
+      },
+    },
+    replyOptions: {
+      onToolStart: (payload) => {
+        if (payload.phase && payload.phase !== "start") {
+          return;
+        }
+        const name = payload.name?.trim();
+        if (!name) {
+          return;
+        }
+        const args = sanitizeQaBusToolCallArguments(payload.args);
+        toolCalls.push({
+          name,
+          ...(args && Object.keys(args).length > 0 ? { arguments: args } : {}),
+        });
       },
     },
     replyPipeline: {},

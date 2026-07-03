@@ -1,8 +1,17 @@
+// Plugin payload validation tests cover update payload checks for plugin updates.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { PluginInstallRecord } from "../../config/types.plugins.js";
+import { resolveOpenClawPackageRootSync } from "../../infra/openclaw-root.js";
 import { runPluginPayloadSmokeCheck } from "./plugin-payload-validation.js";
+
+type BundleFormat = "codex" | "claude" | "cursor";
+type FormatMarkedBundleInstallRecord = PluginInstallRecord & {
+  format: "bundle";
+  bundleFormat?: BundleFormat;
+};
 
 describe("runPluginPayloadSmokeCheck", () => {
   let tmpRoot: string;
@@ -26,6 +35,64 @@ describe("runPluginPayloadSmokeCheck", () => {
       await fs.mkdir(path.dirname(target), { recursive: true });
       await fs.writeFile(target, mainContent, "utf8");
     }
+  }
+
+  async function writeBundle(params: {
+    dir: string;
+    format: BundleFormat;
+    manifest?: unknown;
+    markerOnly?: boolean;
+  }) {
+    await fs.mkdir(params.dir, { recursive: true });
+    if (params.markerOnly) {
+      await fs.mkdir(path.join(params.dir, "skills"), { recursive: true });
+      return;
+    }
+    const manifestDir =
+      params.format === "codex"
+        ? ".codex-plugin"
+        : params.format === "cursor"
+          ? ".cursor-plugin"
+          : ".claude-plugin";
+    await fs.mkdir(path.join(params.dir, manifestDir), { recursive: true });
+    await fs.writeFile(
+      path.join(params.dir, manifestDir, "plugin.json"),
+      JSON.stringify(params.manifest ?? { name: `${params.format}-bundle` }),
+      "utf8",
+    );
+    await fs.mkdir(path.join(params.dir, "skills"), { recursive: true });
+  }
+
+  function formatMarkedBundleRecord(params: {
+    installPath: string;
+    bundleFormat?: BundleFormat;
+  }): PluginInstallRecord {
+    const record: FormatMarkedBundleInstallRecord = {
+      source: "marketplace",
+      format: "bundle",
+      ...(params.bundleFormat ? { bundleFormat: params.bundleFormat } : {}),
+      installPath: params.installPath,
+    };
+    return record;
+  }
+
+  function resolveTestHostRoot(): string {
+    const hostRoot = resolveOpenClawPackageRootSync({
+      argv1: process.argv[1],
+      moduleUrl: import.meta.url,
+      cwd: process.cwd(),
+    });
+    expect(hostRoot).toBeTruthy();
+    return hostRoot!;
+  }
+
+  async function linkOpenClawPeerToHost(dir: string): Promise<void> {
+    await fs.mkdir(path.join(dir, "node_modules"), { recursive: true });
+    await fs.symlink(resolveTestHostRoot(), path.join(dir, "node_modules", "openclaw"), "junction");
+  }
+
+  async function resolveRealPath(target: string): Promise<string> {
+    return await fs.realpath(target).catch(() => target);
   }
 
   it("reports ok for a record whose package.json + main file exist", async () => {
@@ -72,6 +139,135 @@ describe("runPluginPayloadSmokeCheck", () => {
         installPath: dir,
         reason: "missing-package-json",
         detail: `package.json is missing under ${dir}`,
+      },
+    ]);
+  });
+
+  it.each([
+    ["codex", "clawhubFamily"],
+    ["claude", "format"],
+    ["cursor", "format"],
+  ] as const)(
+    "accepts a tracked %s bundle record with no package.json via %s metadata",
+    async (bundleFormat, metadataKind) => {
+      const dir = path.join(tmpRoot, `${bundleFormat}-bundle`);
+      await writeBundle({ dir, format: bundleFormat });
+      const result = await runPluginPayloadSmokeCheck({
+        records: {
+          [`${bundleFormat}-bundle`]:
+            metadataKind === "clawhubFamily"
+              ? {
+                  source: "clawhub",
+                  clawhubFamily: "bundle-plugin",
+                  installPath: dir,
+                }
+              : formatMarkedBundleRecord({ installPath: dir, bundleFormat }),
+        },
+        env: {},
+      });
+      expect(result.checked).toEqual([`${bundleFormat}-bundle`]);
+      expect(result.failures).toEqual([]);
+    },
+  );
+
+  it("accepts a tracked manifestless Claude bundle record with no package.json", async () => {
+    const dir = path.join(tmpRoot, "manifestless-claude-bundle");
+    await writeBundle({ dir, format: "claude", markerOnly: true });
+    const result = await runPluginPayloadSmokeCheck({
+      records: {
+        "manifestless-claude-bundle": formatMarkedBundleRecord({ installPath: dir }),
+      },
+      env: {},
+    });
+    expect(result.checked).toEqual(["manifestless-claude-bundle"]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts a persisted marketplace bundle record without transient format metadata", async () => {
+    const dir = path.join(tmpRoot, "marketplace-bundle");
+    await writeBundle({ dir, format: "cursor" });
+    const result = await runPluginPayloadSmokeCheck({
+      records: {
+        "marketplace-bundle": {
+          source: "marketplace",
+          installPath: dir,
+          marketplaceName: "Local",
+          marketplaceSource: "local/repo",
+          marketplacePlugin: "marketplace-bundle",
+        },
+      },
+      env: {},
+    });
+    expect(result.checked).toEqual(["marketplace-bundle"]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("reports a bundle manifest failure instead of requiring package.json for bundle records", async () => {
+    const dir = path.join(tmpRoot, "broken-bundle");
+    await fs.mkdir(path.join(dir, ".codex-plugin"), { recursive: true });
+    const result = await runPluginPayloadSmokeCheck({
+      records: {
+        "broken-bundle": formatMarkedBundleRecord({ installPath: dir, bundleFormat: "codex" }),
+      },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "broken-bundle",
+        installPath: dir,
+        reason: "missing-bundle-manifest",
+        detail: `No supported bundle manifest or bundle marker found under ${dir}`,
+      },
+    ]);
+  });
+
+  it("reports invalid bundle manifest when a parseable bundle manifest is not an object", async () => {
+    const dir = path.join(tmpRoot, "non-object-bundle");
+    await writeBundle({ dir, format: "codex", manifest: [] });
+    const result = await runPluginPayloadSmokeCheck({
+      records: {
+        "non-object-bundle": {
+          source: "clawhub",
+          clawhubFamily: "bundle-plugin",
+          installPath: dir,
+        },
+      },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "non-object-bundle",
+        installPath: dir,
+        reason: "invalid-bundle-manifest",
+        detail: "Bundle manifest validation failed: plugin manifest must be an object",
+      },
+    ]);
+  });
+
+  it("keeps dual-format bundle records on native package validation", async () => {
+    const dir = path.join(tmpRoot, "dual-format-bundle");
+    await writeBundle({ dir, format: "codex" });
+    await writePackage(dir, {
+      name: "dual-format-bundle",
+      openclaw: { extensions: ["./missing-extension.js"] },
+    });
+    const result = await runPluginPayloadSmokeCheck({
+      records: {
+        "dual-format-bundle": {
+          source: "clawhub",
+          clawhubFamily: "bundle-plugin",
+          installPath: dir,
+        },
+      },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "dual-format-bundle",
+        installPath: dir,
+        reason: "missing-extension-entry",
+        detail:
+          "Plugin extension entry validation failed: extension entry not found: ./missing-extension.js",
       },
     ]);
   });
@@ -130,6 +326,73 @@ describe("runPluginPayloadSmokeCheck", () => {
     expect(result.failures).toEqual([]);
   });
 
+  it("reports a failure when `openclaw.extensions` contains invalid entries", async () => {
+    const dir = path.join(tmpRoot, "brave");
+    await writePackage(dir, {
+      name: "@openclaw/brave-plugin",
+      openclaw: { extensions: ["./index.js", " "] },
+      main: "main.js",
+    });
+    await fs.writeFile(path.join(dir, "index.js"), "export default {};\n", "utf8");
+    const result = await runPluginPayloadSmokeCheck({
+      records: { brave: { source: "npm", installPath: dir } },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "brave",
+        installPath: dir,
+        reason: "missing-extension-entry",
+        detail:
+          "Plugin extension entry validation failed: package.json openclaw.extensions[1] must be a non-empty string",
+      },
+    ]);
+  });
+
+  it("reports only extension-entry failure for an empty extensions list even if main is missing", async () => {
+    const dir = path.join(tmpRoot, "brave-empty");
+    await writePackage(dir, {
+      name: "@openclaw/brave-plugin",
+      openclaw: { extensions: [] },
+      main: "dist/index.js",
+    });
+    const result = await runPluginPayloadSmokeCheck({
+      records: { brave: { source: "npm", installPath: dir } },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "brave",
+        installPath: dir,
+        reason: "missing-extension-entry",
+        detail:
+          "Plugin extension entry validation failed: package.json openclaw.extensions is empty",
+      },
+    ]);
+  });
+
+  it("reports missing main entry when extension entries are valid", async () => {
+    const dir = path.join(tmpRoot, "brave");
+    await writePackage(dir, {
+      name: "@openclaw/brave-plugin",
+      openclaw: { extensions: ["./index.js"] },
+      main: "dist/index.js",
+    });
+    await fs.writeFile(path.join(dir, "index.js"), "export default {};\n", "utf8");
+    const result = await runPluginPayloadSmokeCheck({
+      records: { brave: { source: "npm", installPath: dir } },
+      env: {},
+    });
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "brave",
+        installPath: dir,
+        reason: "missing-main-entry",
+        detail: `Plugin main entry "dist/index.js" not found at ${path.join(dir, "dist/index.js")}`,
+      },
+    ]);
+  });
+
   it("accepts a packaged TypeScript extension entry when compiled runtime output exists", async () => {
     const dir = path.join(tmpRoot, "codex");
     await writePackage(dir, {
@@ -142,6 +405,127 @@ describe("runPluginPayloadSmokeCheck", () => {
       records: { codex: { source: "npm", installPath: dir } },
       env: {},
     });
+    expect(result.failures).toEqual([]);
+  });
+
+  it("reports a failure when an openclaw peer link is missing", async () => {
+    const dir = path.join(tmpRoot, "codex");
+    await writePackage(
+      dir,
+      {
+        name: "@openclaw/codex",
+        main: "dist/index.js",
+        peerDependencies: { openclaw: ">=2026.5.18-beta.1" },
+      },
+      "export default {};\n",
+    );
+
+    const result = await runPluginPayloadSmokeCheck({
+      records: { codex: { source: "npm", installPath: dir } },
+      env: {},
+    });
+
+    expect(result.failures).toStrictEqual([
+      {
+        pluginId: "codex",
+        installPath: dir,
+        reason: "missing-openclaw-peer-link",
+        detail: `Plugin declares peerDependency "openclaw" but peer link audit failed: missing ${path.join(
+          dir,
+          "node_modules",
+          "openclaw",
+        )}.`,
+      },
+    ]);
+  });
+
+  it("reports a failure when an openclaw peer link is a stale real directory", async () => {
+    const dir = path.join(tmpRoot, "codex");
+    await writePackage(
+      dir,
+      {
+        name: "@openclaw/codex",
+        main: "dist/index.js",
+        peerDependencies: { openclaw: ">=2026.5.18-beta.1" },
+      },
+      "export default {};\n",
+    );
+    const stalePeerDir = path.join(dir, "node_modules", "openclaw");
+    await fs.mkdir(stalePeerDir, { recursive: true });
+
+    const result = await runPluginPayloadSmokeCheck({
+      records: { codex: { source: "npm", installPath: dir } },
+      env: {},
+    });
+
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toMatchObject({
+      pluginId: "codex",
+      installPath: dir,
+      reason: "missing-openclaw-peer-link",
+    });
+    expect(result.failures[0]?.detail).toContain(`${stalePeerDir} points to`);
+    expect(result.failures[0]?.detail).toContain(
+      `instead of ${await resolveRealPath(resolveTestHostRoot())}`,
+    );
+  });
+
+  it("reports a failure when an openclaw peer link points at the wrong package root", async () => {
+    const dir = path.join(tmpRoot, "codex");
+    await writePackage(
+      dir,
+      {
+        name: "@openclaw/codex",
+        main: "dist/index.js",
+        peerDependencies: { openclaw: ">=2026.5.18-beta.1" },
+      },
+      "export default {};\n",
+    );
+    const wrongHostRoot = path.join(tmpRoot, "old-openclaw");
+    await fs.mkdir(wrongHostRoot, { recursive: true });
+    await fs.mkdir(path.join(dir, "node_modules"), { recursive: true });
+    await fs.symlink(wrongHostRoot, path.join(dir, "node_modules", "openclaw"), "junction");
+
+    const result = await runPluginPayloadSmokeCheck({
+      records: { codex: { source: "npm", installPath: dir } },
+      env: {},
+    });
+
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toMatchObject({
+      pluginId: "codex",
+      installPath: dir,
+      reason: "missing-openclaw-peer-link",
+    });
+    expect(result.failures[0]?.detail).toContain(
+      `${path.join(
+        dir,
+        "node_modules",
+        "openclaw",
+      )} points to ${await resolveRealPath(wrongHostRoot)} instead of ${await resolveRealPath(
+        resolveTestHostRoot(),
+      )}`,
+    );
+  });
+
+  it("accepts an openclaw peer link when it resolves to the host package root", async () => {
+    const dir = path.join(tmpRoot, "codex");
+    await writePackage(
+      dir,
+      {
+        name: "@openclaw/codex",
+        main: "dist/index.js",
+        peerDependencies: { openclaw: ">=2026.5.18-beta.1" },
+      },
+      "export default {};\n",
+    );
+    await linkOpenClawPeerToHost(dir);
+
+    const result = await runPluginPayloadSmokeCheck({
+      records: { codex: { source: "npm", installPath: dir } },
+      env: {},
+    });
+
     expect(result.failures).toEqual([]);
   });
 

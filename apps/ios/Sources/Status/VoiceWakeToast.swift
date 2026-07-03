@@ -2,7 +2,6 @@ import SwiftUI
 
 struct VoiceWakeToast: View {
     var command: String
-    var brighten: Bool = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -16,7 +15,9 @@ struct VoiceWakeToast: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .statusGlassCard(brighten: self.brighten, verticalPadding: 10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .openClawGlassSurface()
         .accessibilityLabel("Voice Wake triggered")
         .accessibilityValue("Command: \(self.command)")
     }

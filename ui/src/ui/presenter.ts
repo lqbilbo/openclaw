@@ -1,19 +1,14 @@
+// Control UI module implements presenter behavior.
 import { t } from "../i18n/index.ts";
+import { resolveCronJobLastRunStatus } from "./cron-status.ts";
 import {
+  formatDateMs,
   formatRelativeTimestamp,
   formatDurationHuman,
   formatMs,
   formatUnknownText,
 } from "./format.ts";
 import type { CronJob, GatewaySessionRow, PresenceEntry } from "./types.ts";
-
-export function formatPresenceSummary(entry: PresenceEntry): string {
-  const host = entry.host ?? "unknown";
-  const ip = entry.ip ? `(${entry.ip})` : "";
-  const mode = entry.mode ?? "";
-  const version = entry.version ?? "";
-  return `${host} ${ip} ${mode} ${version}`.trim();
-}
 
 export function formatPresenceAge(entry: PresenceEntry): string {
   const ts = entry.ts ?? null;
@@ -24,7 +19,10 @@ export function formatNextRun(ms?: number | null) {
   if (!ms) {
     return t("common.na");
   }
-  const weekday = new Date(ms).toLocaleDateString(undefined, { weekday: "short" });
+  const weekday = formatDateMs(ms, { weekday: "short" });
+  if (weekday === t("common.na")) {
+    return weekday;
+  }
   return `${weekday}, ${formatMs(ms)} (${formatRelativeTimestamp(ms)})`;
 }
 
@@ -52,7 +50,7 @@ export function formatCronState(job: CronJob) {
   const state = job.state ?? {};
   const next = state.nextRunAtMs ? formatMs(state.nextRunAtMs) : t("common.na");
   const last = state.lastRunAtMs ? formatMs(state.lastRunAtMs) : t("common.na");
-  const status = state.lastStatus ?? t("common.na");
+  const status = resolveCronJobLastRunStatus(job);
   return `${status} · next ${next} · last ${last}`;
 }
 
@@ -65,6 +63,11 @@ export function formatCronSchedule(job: CronJob) {
   if (s.kind === "every") {
     return `Every ${formatDurationHuman(s.everyMs)}`;
   }
+  if (s.kind === "on-exit") {
+    // on-exit jobs carry a watched command (+ optional cwd), not a cron expr;
+    // without this branch they fall through and render "Cron undefined".
+    return `On exit: ${s.command}${s.cwd ? ` (cwd: ${s.cwd})` : ""}`;
+  }
   return `Cron ${s.expr}${s.tz ? ` (${s.tz})` : ""}`;
 }
 
@@ -72,6 +75,9 @@ export function formatCronPayload(job: CronJob) {
   const p = job.payload;
   if (p.kind === "systemEvent") {
     return `System: ${p.text}`;
+  }
+  if (p.kind === "command") {
+    return `Command: ${p.argv.join(" ")}`;
   }
   const base = `Agent: ${p.message}`;
   const delivery = job.delivery;

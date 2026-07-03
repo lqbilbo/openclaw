@@ -1,9 +1,11 @@
+// Zalo plugin module implements monitor behavior.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { logTypingFailure } from "openclaw/plugin-sdk/channel-feedback";
 import { resolveStableChannelMessageIngress } from "openclaw/plugin-sdk/channel-ingress-runtime";
 import { createChannelPairingController } from "openclaw/plugin-sdk/channel-pairing";
 import type { MarkdownTableMode, OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { resolveInboundRouteEnvelopeBuilderWithRuntime } from "openclaw/plugin-sdk/inbound-envelope";
+import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { resolveSendableOutboundReplyParts } from "openclaw/plugin-sdk/reply-payload";
 import {
   deliverTextOrMediaReply,
@@ -33,6 +35,7 @@ import {
 import { normalizeZaloAllowEntry, resolveZaloRuntimeGroupPolicy } from "./group-access.js";
 import { resolveZaloProxyFetch } from "./proxy.js";
 import { getZaloRuntime } from "./runtime.js";
+
 export type { ZaloRuntimeEnv } from "./monitor.types.js";
 import {
   prepareZaloDurableReplyPayload,
@@ -63,10 +66,10 @@ const ZALO_TEXT_LIMIT = 2000;
 const DEFAULT_MEDIA_MAX_MB = 5;
 const WEBHOOK_CLEANUP_TIMEOUT_MS = 5_000;
 const ZALO_TYPING_TIMEOUT_MS = 5_000;
+const UNIX_MILLISECONDS_THRESHOLD = 1_000_000_000_000;
 
 type ZaloCoreRuntime = ReturnType<typeof getZaloRuntime>;
 type ZaloStatusSink = (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
-type ZaloWebhookModule = typeof import("./monitor.webhook.js");
 type ZaloProcessingContext = {
   token: string;
   account: ResolvedZaloAccount;
@@ -88,13 +91,30 @@ type ZaloPollingLoopParams = ZaloProcessingContext & {
 type ZaloUpdateProcessingParams = ZaloProcessingContext & {
   update: ZaloUpdate;
 };
-
-let zaloWebhookModulePromise: Promise<ZaloWebhookModule> | undefined;
 const hostedMediaRouteRefs = new Map<string, { count: number; unregisters: Array<() => void> }>();
 
-function loadZaloWebhookModule(): Promise<ZaloWebhookModule> {
-  zaloWebhookModulePromise ??= import("./monitor.webhook.js");
-  return zaloWebhookModulePromise;
+function resolveZaloTimestampMs(date: number | undefined): number | undefined {
+  if (!date) {
+    return undefined;
+  }
+  return date >= UNIX_MILLISECONDS_THRESHOLD ? date : date * 1000;
+}
+
+const loadZaloWebhookModule = createLazyRuntimeModule(() => import("./monitor.webhook.js"));
+
+function releaseSharedHostedMediaRouteRef(routePath: string): void {
+  const current = hostedMediaRouteRefs.get(routePath);
+  if (!current) {
+    return;
+  }
+  if (current.count > 1) {
+    current.count -= 1;
+    return;
+  }
+  hostedMediaRouteRefs.delete(routePath);
+  for (const unregisterHandle of current.unregisters) {
+    unregisterHandle();
+  }
 }
 
 function registerSharedHostedMediaRoute(params: {
@@ -124,37 +144,11 @@ function registerSharedHostedMediaRoute(params: {
   if (existing) {
     existing.count += 1;
     existing.unregisters.push(unregister);
-    return () => {
-      const current = hostedMediaRouteRefs.get(params.path);
-      if (!current) {
-        return;
-      }
-      if (current.count > 1) {
-        current.count -= 1;
-        return;
-      }
-      hostedMediaRouteRefs.delete(params.path);
-      for (const unregisterHandle of current.unregisters) {
-        unregisterHandle();
-      }
-    };
+    return () => releaseSharedHostedMediaRouteRef(params.path);
   }
 
   hostedMediaRouteRefs.set(params.path, { count: 1, unregisters: [unregister] });
-  return () => {
-    const current = hostedMediaRouteRefs.get(params.path);
-    if (!current) {
-      return;
-    }
-    if (current.count > 1) {
-      current.count -= 1;
-      return;
-    }
-    hostedMediaRouteRefs.delete(params.path);
-    for (const unregisterHandle of current.unregisters) {
-      unregisterHandle();
-    }
-  };
+  return () => releaseSharedHostedMediaRouteRef(params.path);
 }
 
 type ZaloMessagePipelineParams = ZaloProcessingContext & {
@@ -282,12 +276,16 @@ function startPollingLoop(params: ZaloPollingLoopParams) {
         // no updates
       } else if (!isStopped() && !abortSignal.aborted) {
         runtime.error?.(`[${account.accountId}] Zalo polling error: ${formatZaloError(err)}`);
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 5000);
+        });
       }
     }
 
     if (!isStopped() && !abortSignal.aborted) {
-      setImmediate(poll);
+      setImmediate(() => {
+        void poll();
+      });
     }
   };
 
@@ -451,7 +449,7 @@ async function authorizeZaloMessage(
       providerMissingFallbackApplied: senderAccess.providerMissingFallbackApplied,
       providerKey: "zalo",
       accountId: account.accountId,
-      log: (message) => logVerbose(core, runtime, message),
+      log: (messageValue) => logVerbose(core, runtime, messageValue),
     });
     if (!senderAccess.allowed) {
       if (senderAccess.reasonCode === "group_policy_disabled") {
@@ -486,12 +484,12 @@ async function authorizeZaloMessage(
         onCreated: () => {
           logVerbose(core, runtime, `zalo pairing request sender=${senderId}`);
         },
-        sendPairingReply: async (text) => {
+        sendPairingReply: async (textLocal) => {
           await sendMessage(
             token,
             {
               chat_id: chatId,
-              text,
+              text: textLocal,
             },
             fetcher,
           );
@@ -570,18 +568,19 @@ async function processMessageWithPipeline(params: ZaloMessagePipelineParams): Pr
   }
 
   const fromLabel = isGroup ? `group:${chatId}` : senderName || `user:${senderId}`;
+  const timestamp = resolveZaloTimestampMs(date);
   const { storePath, body } = buildEnvelope({
     channel: "Zalo",
     from: fromLabel,
-    timestamp: date ? date * 1000 : undefined,
+    timestamp,
     body: rawBody,
   });
 
-  const ctxPayload = core.channel.turn.buildContext({
+  const ctxPayload = core.channel.inbound.buildContext({
     channel: "zalo",
     accountId: route.accountId,
     messageId: message_id,
-    timestamp: date ? date * 1000 : undefined,
+    timestamp,
     from: isGroup ? `zalo:group:${chatId}` : `zalo:${senderId}`,
     sender: {
       id: senderId,
@@ -591,10 +590,6 @@ async function processMessageWithPipeline(params: ZaloMessagePipelineParams): Pr
       kind: isGroup ? "group" : "direct",
       id: chatId,
       label: fromLabel,
-      routePeer: {
-        kind: isGroup ? "group" : "direct",
-        id: chatId,
-      },
     },
     route: {
       agentId: route.agentId,
@@ -603,14 +598,12 @@ async function processMessageWithPipeline(params: ZaloMessagePipelineParams): Pr
     },
     reply: {
       to: `zalo:${chatId}`,
-      originatingTo: `zalo:${chatId}`,
     },
     message: {
       body,
       bodyForAgent: rawBody,
       rawBody,
       commandBody: rawBody,
-      envelopeFrom: fromLabel,
     },
     media:
       mediaPath || mediaType
@@ -648,7 +641,7 @@ async function processMessageWithPipeline(params: ZaloMessagePipelineParams): Pr
       },
       onStartError: (err: unknown) => {
         logTypingFailure({
-          log: (message) => logVerbose(core, runtime, message),
+          log: (messageLocal) => logVerbose(core, runtime, messageLocal),
           channel: "zalo",
           action: "start",
           target: chatId,
@@ -658,7 +651,7 @@ async function processMessageWithPipeline(params: ZaloMessagePipelineParams): Pr
     },
   };
 
-  await core.channel.turn.runAssembled({
+  await core.channel.inbound.dispatchReply({
     cfg: config,
     channel: "zalo",
     accountId: account.accountId,
@@ -1005,7 +998,8 @@ export async function monitorZaloProvider(options: ZaloMonitorOptions): Promise<
   }
 }
 
-export const __testing = {
+export const testing = {
   resolveZaloRuntimeGroupPolicy,
   clearHostedMediaRouteRefsForTest: () => hostedMediaRouteRefs.clear(),
 };
+export { testing as __testing };

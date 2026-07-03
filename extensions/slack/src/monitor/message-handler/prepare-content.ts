@@ -1,7 +1,12 @@
+// Slack plugin module implements prepare content behavior.
 import type { WebClient as SlackWebClient } from "@slack/web-api";
 import { runTasksWithConcurrency } from "openclaw/plugin-sdk/concurrency-runtime";
+import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
+import {
+  normalizeOptionalString,
+  readStringValue as readString,
+} from "openclaw/plugin-sdk/string-coerce-runtime";
 import { formatSlackFileReference } from "../../file-reference.js";
 import type { SlackFile, SlackMessageEvent } from "../../types.js";
 import { MAX_SLACK_MEDIA_FILES, type SlackMediaResult } from "../media-types.js";
@@ -46,13 +51,7 @@ type SlackBlocksText = {
   hasRichText: boolean;
 };
 
-type SlackMediaModule = typeof import("../media.js");
-let slackMediaModulePromise: Promise<SlackMediaModule> | undefined;
-
-function loadSlackMediaModule(): Promise<SlackMediaModule> {
-  slackMediaModulePromise ??= import("../media.js");
-  return slackMediaModulePromise;
-}
+const loadSlackMediaModule = createLazyRuntimeModule(() => import("../media.js"));
 
 function collectUniqueSlackMentionIds(texts: Array<string | undefined>): string[] {
   const seen = new Set<string>();
@@ -86,10 +85,6 @@ function renderSlackUserMentions(
     const rendered = renderedMentions.get(userId);
     return rendered ?? full;
   });
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function readTextObject(value: unknown): string | undefined {
@@ -293,6 +288,9 @@ export async function resolveSlackMessageContent(params: {
   client?: SlackWebClient;
   mediaMaxBytes: number;
   resolveUserName?: (userId: string) => Promise<{ name?: string }>;
+  mediaReadIdleTimeoutMs?: number;
+  mediaTotalTimeoutMs?: number;
+  abortSignal?: AbortSignal;
 }): Promise<SlackResolvedMessageContent | null> {
   const ownFiles = filterInheritedParentFiles({
     files: params.message.files,
@@ -308,6 +306,9 @@ export async function resolveSlackMessageContent(params: {
             client: params.client,
             token: params.botToken,
             maxBytes: params.mediaMaxBytes,
+            readIdleTimeoutMs: params.mediaReadIdleTimeoutMs,
+            totalTimeoutMs: params.mediaTotalTimeoutMs,
+            abortSignal: params.abortSignal,
           }),
         )
       : Promise.resolve(null);
@@ -320,6 +321,9 @@ export async function resolveSlackMessageContent(params: {
             client: params.client,
             token: params.botToken,
             maxBytes: params.mediaMaxBytes,
+            readIdleTimeoutMs: params.mediaReadIdleTimeoutMs,
+            totalTimeoutMs: params.mediaTotalTimeoutMs,
+            abortSignal: params.abortSignal,
           }),
         )
       : Promise.resolve(null);

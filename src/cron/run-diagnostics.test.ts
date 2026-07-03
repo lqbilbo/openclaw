@@ -1,7 +1,11 @@
+// Cron run diagnostics tests cover diagnostic event formatting for scheduled runs.
 import { describe, expect, it } from "vitest";
+import { setReplyPayloadMetadata } from "../auto-reply/reply-payload.js";
 import {
+  createCronRunDiagnosticsFromMissingWebSearchProvider,
   createCronRunDiagnosticsFromAgentResult,
   createCronRunDiagnosticsFromError,
+  MISSING_WEB_SEARCH_PROVIDER_DIAGNOSTIC_MESSAGE,
   mergeCronRunDiagnostics,
   normalizeCronRunDiagnostics,
   summarizeCronRunDiagnostics,
@@ -78,6 +82,42 @@ describe("cron run diagnostics", () => {
     expect(summarizeCronRunDiagnostics(merged)).toBe("delivery failed");
   });
 
+  it("warns when cron toolsAllow requests web_search without a provider", () => {
+    const diagnostics = createCronRunDiagnosticsFromMissingWebSearchProvider({
+      toolsAllow: ["web_*"],
+      hasWebSearchProvider: false,
+      nowMs: () => 900,
+    });
+
+    expect(diagnostics).toEqual({
+      summary: MISSING_WEB_SEARCH_PROVIDER_DIAGNOSTIC_MESSAGE,
+      entries: [
+        {
+          ts: 900,
+          source: "cron-preflight",
+          severity: "warn",
+          message: MISSING_WEB_SEARCH_PROVIDER_DIAGNOSTIC_MESSAGE,
+          toolName: "web_search",
+        },
+      ],
+    });
+  });
+
+  it("does not warn for wildcard toolsAllow or configured web_search providers", () => {
+    expect(
+      createCronRunDiagnosticsFromMissingWebSearchProvider({
+        toolsAllow: ["*"],
+        hasWebSearchProvider: false,
+      }),
+    ).toBeUndefined();
+    expect(
+      createCronRunDiagnosticsFromMissingWebSearchProvider({
+        toolsAllow: ["web_search"],
+        hasWebSearchProvider: true,
+      }),
+    ).toBeUndefined();
+  });
+
   it("keeps a later delivery error summary ahead of an earlier warning", () => {
     const warning = normalizeCronRunDiagnostics({
       summary: "agent warning",
@@ -147,6 +187,74 @@ describe("cron run diagnostics", () => {
     expect(
       createCronRunDiagnosticsFromAgentResult(result, { finalStatus: "error" }),
     ).toBeUndefined();
+  });
+
+  it("keeps non-terminal tool warnings as warning diagnostics for successful runs", () => {
+    const toolWarning = setReplyPayloadMetadata(
+      {
+        toolName: "exec",
+        text: "⚠️ Exec failed",
+        isError: true,
+      },
+      { nonTerminalToolErrorWarning: true },
+    );
+
+    const diagnostics = createCronRunDiagnosticsFromAgentResult(
+      {
+        payloads: [{ text: "Queued 3 topics." }, toolWarning],
+      },
+      { finalStatus: "ok", nowMs: () => 700 },
+    );
+
+    expect(diagnostics?.entries).toEqual([
+      {
+        ts: 700,
+        source: "tool",
+        severity: "warn",
+        message: "⚠️ Exec failed",
+        toolName: "exec",
+      },
+    ]);
+    expect(diagnostics?.summary).toBe("⚠️ Exec failed");
+  });
+
+  it("downgrades recovered tool errors for successful runs", () => {
+    const diagnostics = createCronRunDiagnosticsFromAgentResult(
+      {
+        payloads: [
+          {
+            toolName: "exec",
+            text: "⚠️ 🛠️ jq -s '{total:length}' (agent) failed",
+            isError: true,
+            details: {
+              status: "failed",
+              exitCode: 1,
+              aggregated: "jq syntax error",
+            },
+          },
+        ],
+      },
+      { finalStatus: "ok", nowMs: () => 800 },
+    );
+
+    expect(diagnostics?.entries).toEqual([
+      {
+        ts: 800,
+        source: "exec",
+        severity: "warn",
+        message: "jq syntax error",
+        toolName: "exec",
+        exitCode: 1,
+      },
+      {
+        ts: 800,
+        source: "tool",
+        severity: "warn",
+        message: "⚠️ 🛠️ jq -s '{total:length}' (agent) failed",
+        toolName: "exec",
+      },
+    ]);
+    expect(diagnostics?.summary).toBe("⚠️ 🛠️ jq -s '{total:length}' (agent) failed");
   });
 
   it("captures silent failed exec details with a fallback message", () => {

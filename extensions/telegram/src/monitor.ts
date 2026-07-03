@@ -1,7 +1,9 @@
+// Telegram plugin module implements monitor behavior.
 import type { RunOptions } from "@grammyjs/runner";
 import { CHANNEL_APPROVAL_NATIVE_RUNTIME_CONTEXT_CAPABILITY } from "openclaw/plugin-sdk/approval-handler-adapter-runtime";
 import { registerChannelRuntimeContext } from "openclaw/plugin-sdk/channel-runtime-context";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { createLazyRuntimeModule } from "openclaw/plugin-sdk/lazy-runtime";
 import { resolveAgentMaxConcurrent } from "openclaw/plugin-sdk/model-session-runtime";
 import { getRuntimeConfig } from "openclaw/plugin-sdk/runtime-config-snapshot";
 import {
@@ -89,26 +91,24 @@ type TelegramPollingSessionInstance = InstanceType<
   TelegramMonitorPollingRuntime["TelegramPollingSession"]
 >;
 
-let telegramMonitorPollingRuntimePromise:
-  | Promise<typeof import("./monitor-polling.runtime.js")>
-  | undefined;
+const loadTelegramMonitorPollingRuntime = createLazyRuntimeModule(
+  () => import("./monitor-polling.runtime.js"),
+);
 
-async function loadTelegramMonitorPollingRuntime() {
-  telegramMonitorPollingRuntimePromise ??= import("./monitor-polling.runtime.js");
-  return await telegramMonitorPollingRuntimePromise;
-}
-
-let telegramMonitorWebhookRuntimePromise:
-  | Promise<typeof import("./monitor-webhook.runtime.js")>
-  | undefined;
-
-async function loadTelegramMonitorWebhookRuntime() {
-  telegramMonitorWebhookRuntimePromise ??= import("./monitor-webhook.runtime.js");
-  return await telegramMonitorWebhookRuntimePromise;
-}
+const loadTelegramMonitorWebhookRuntime = createLazyRuntimeModule(
+  () => import("./monitor-webhook.runtime.js"),
+);
 
 export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
-  const log = opts.runtime?.error ?? console.error;
+  const logInfo = (line: string) => (opts.runtime?.log ?? console.log)(line);
+  const logError = (line: string) => (opts.runtime?.error ?? console.error)(line);
+  const log = (line: string) => {
+    if (line.includes("[telegram][diag]")) {
+      logInfo(line);
+      return;
+    }
+    logError(line);
+  };
   let pollingSession: TelegramPollingSessionInstance | undefined;
 
   const handlePollingNetworkFailure = (err: unknown, label: string) => {
@@ -231,7 +231,7 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
           try {
             await deleteTelegramUpdateOffset({ accountId: account.accountId });
           } catch (err) {
-            (opts.runtime?.error ?? console.error)(
+            logError(
               `telegram: failed to delete stale update offset after rotation: ${String(err)}`,
             );
           }
@@ -261,9 +261,7 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
             botToken: token,
           });
         } catch (err) {
-          (opts.runtime?.error ?? console.error)(
-            `telegram: failed to persist update offset: ${String(err)}`,
-          );
+          logError(`telegram: failed to persist update offset: ${String(err)}`);
         }
       };
 
@@ -291,6 +289,13 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
         createTelegramTransport: createTelegramTransportForPolling,
         stallThresholdMs: account.config.pollingStallThresholdMs,
         setStatus: opts.setStatus,
+        isolatedIngress: {
+          enabled: opts.isolatedIngress?.enabled ?? true,
+          apiRoot: account.config.apiRoot,
+          timeoutSeconds: account.config.timeoutSeconds,
+          proxy: account.config.proxy,
+          network: account.config.network,
+        },
       });
       await pollingSession.runUntilAbort();
     } finally {

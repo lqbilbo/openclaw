@@ -1,15 +1,18 @@
+// Control UI controller manages cron gateway state.
 import { t } from "../../i18n/index.ts";
 import { DEFAULT_CRON_FORM } from "../app-defaults.ts";
 import { getCronJobPayload, hasCronJobPayload } from "../cron-payload.ts";
+import { resolveCronJobLastRunStatus } from "../cron-status.ts";
 import { toNumber } from "../format.ts";
 import type { GatewayBrowserClient } from "../gateway.ts";
-import { normalizeLowercaseStringOrEmpty } from "../string-coerce.ts";
+import { normalizeLowercaseStringOrEmpty, sortUniqueStrings } from "../string-coerce.ts";
 import type {
   CronJob,
   CronDeliveryStatus,
   CronJobsEnabledFilter,
   CronJobsListResult,
   CronJobsSortBy,
+  CronRunStatus,
   CronRunScope,
   CronRunLogEntry,
   CronRunsResult,
@@ -41,8 +44,8 @@ export type CronFieldKey =
 
 export type CronFieldErrors = Partial<Record<CronFieldKey, string>>;
 
-export type CronJobsScheduleKindFilter = "all" | "at" | "every" | "cron";
-export type CronJobsLastStatusFilter = "all" | "ok" | "error" | "skipped";
+export type CronJobsScheduleKindFilter = "all" | "at" | "every" | "cron" | "on-exit";
+export type CronJobsLastStatusFilter = "all" | CronRunStatus | "unknown";
 export type CronRunsLoadStatus = "ok" | "error" | "skipped";
 
 export type CronState = {
@@ -53,6 +56,8 @@ export type CronState = {
   cronQuickCreateStep: import("../views/cron-quick-create.ts").CronQuickCreateStep;
   cronQuickCreateDraft: import("../views/cron-quick-create.ts").CronQuickCreateDraft | null;
   cronJobsLoadingMore: boolean;
+  cronJobsReloadPending: boolean;
+  cronJobsReloadPendingTableFilters: boolean;
   cronJobs: CronJob[];
   cronJobsTotal: number;
   cronJobsHasMore: boolean;
@@ -92,8 +97,10 @@ export type CronModelSuggestionsState = {
   cronModelSuggestions: string[];
 };
 
-function supportsAnnounceDelivery(form: Pick<CronFormState, "sessionTarget" | "payloadKind">) {
-  return form.sessionTarget !== "main" && form.payloadKind === "agentTurn";
+function supportsAnnounceDelivery(
+  form: Pick<CronFormState, "sessionTarget" | "payloadKind" | "payloadLocked">,
+) {
+  return form.sessionTarget !== "main" && (form.payloadKind === "agentTurn" || form.payloadLocked);
 }
 
 export function normalizeCronFormState(form: CronFormState): CronFormState {
@@ -124,7 +131,7 @@ export function validateCronForm(form: CronFormState): CronFieldErrors {
     if (amount <= 0) {
       errors.everyAmount = "cron.errors.everyAmountInvalid";
     }
-  } else {
+  } else if (form.scheduleKind === "cron") {
     if (!form.cronExpr.trim()) {
       errors.cronExpr = "cron.errors.cronExprRequired";
     }
@@ -138,13 +145,13 @@ export function validateCronForm(form: CronFormState): CronFieldErrors {
       }
     }
   }
-  if (!form.payloadText.trim()) {
+  if (!form.payloadLocked && !form.payloadText.trim()) {
     errors.payloadText =
       form.payloadKind === "systemEvent"
         ? "cron.errors.systemTextRequired"
         : "cron.errors.agentMessageRequired";
   }
-  if (form.payloadKind === "agentTurn") {
+  if (!form.payloadLocked && form.payloadKind === "agentTurn") {
     const timeoutRaw = form.timeoutSeconds.trim();
     if (timeoutRaw) {
       const timeout = toNumber(timeoutRaw, 0);
@@ -221,7 +228,7 @@ export async function loadCronModelSuggestions(state: CronModelSuggestionsState)
         return typeof id === "string" ? id.trim() : "";
       })
       .filter(Boolean);
-    state.cronModelSuggestions = Array.from(new Set(ids)).toSorted((a, b) => a.localeCompare(b));
+    state.cronModelSuggestions = sortUniqueStrings(ids);
   } catch {
     state.cronModelSuggestions = [];
   }
@@ -274,14 +281,31 @@ function normalizeCronPageMeta(params: {
   return { total, hasMore, nextOffset };
 }
 
-export async function loadCronJobsPage(state: CronState, opts?: { append?: boolean }) {
+async function drainPendingCronJobsReload(state: CronState) {
+  if (!state.cronJobsReloadPending) {
+    return;
+  }
+  const tableFilters = state.cronJobsReloadPendingTableFilters;
+  state.cronJobsReloadPending = false;
+  state.cronJobsReloadPendingTableFilters = false;
+  await loadCronJobsPage(state, { tableFilters });
+}
+
+export async function loadCronJobsPage(
+  state: CronState,
+  opts?: { append?: boolean; tableFilters?: boolean },
+) {
   if (!state.client || !state.connected) {
     return;
   }
+  const append = opts?.append === true;
   if (state.cronLoading || state.cronJobsLoadingMore) {
+    if (!append) {
+      state.cronJobsReloadPending = true;
+      state.cronJobsReloadPendingTableFilters = opts?.tableFilters === true;
+    }
     return;
   }
-  const append = opts?.append === true;
   if (append && !state.cronJobsHasMore) {
     return;
   }
@@ -299,6 +323,12 @@ export async function loadCronJobsPage(state: CronState, opts?: { append?: boole
       offset,
       query: state.cronJobsQuery.trim() || undefined,
       enabled: state.cronJobsEnabledFilter,
+      ...(opts?.tableFilters
+        ? {
+            scheduleKind: state.cronJobsScheduleKindFilter,
+            lastRunStatus: state.cronJobsLastStatusFilter,
+          }
+        : {}),
       sortBy: state.cronJobsSortBy,
       sortDir: state.cronJobsSortDir,
     });
@@ -329,6 +359,7 @@ export async function loadCronJobsPage(state: CronState, opts?: { append?: boole
     } else {
       state.cronLoading = false;
     }
+    await drainPendingCronJobsReload(state);
   }
 }
 
@@ -361,20 +392,37 @@ export function getVisibleCronJobs(
   state: Pick<CronState, "cronJobs" | "cronJobsScheduleKindFilter" | "cronJobsLastStatusFilter">,
 ): CronJob[] {
   return state.cronJobs.filter((job) => {
+    const scheduleKind = resolveCronJobScheduleKind(job);
+    if (!scheduleKind) {
+      return false;
+    }
     if (
       state.cronJobsScheduleKindFilter !== "all" &&
-      job.schedule.kind !== state.cronJobsScheduleKindFilter
+      scheduleKind !== state.cronJobsScheduleKindFilter
     ) {
       return false;
     }
     if (
       state.cronJobsLastStatusFilter !== "all" &&
-      job.state?.lastStatus !== state.cronJobsLastStatusFilter
+      resolveCronJobLastRunStatus(job) !== state.cronJobsLastStatusFilter
     ) {
       return false;
     }
     return true;
   });
+}
+
+function resolveCronJobScheduleKind(job: CronJob): string | null {
+  const scheduleKind = (job.schedule as { kind?: unknown } | null | undefined)?.kind;
+  if (
+    scheduleKind === "at" ||
+    scheduleKind === "every" ||
+    scheduleKind === "cron" ||
+    scheduleKind === "on-exit"
+  ) {
+    return scheduleKind;
+  }
+  return null;
 }
 
 function clearCronEditState(state: CronState) {
@@ -444,6 +492,7 @@ function parseStaggerSchedule(
 function jobToForm(job: CronJob, prev: CronFormState): CronFormState {
   const failureAlert = job.failureAlert;
   const payload = getCronJobPayload(job);
+  const payloadLocked = payload?.kind === "command";
   const next: CronFormState = {
     ...prev,
     name: job.name,
@@ -464,8 +513,19 @@ function jobToForm(job: CronJob, prev: CronFormState): CronFormState {
     staggerUnit: "seconds",
     sessionTarget: job.sessionTarget,
     wakeMode: job.wakeMode,
-    payloadKind: payload?.kind ?? DEFAULT_CRON_FORM.payloadKind,
-    payloadText: payload?.kind === "systemEvent" ? payload.text : (payload?.message ?? ""),
+    payloadKind:
+      payload?.kind === "systemEvent" || payload?.kind === "agentTurn"
+        ? payload.kind
+        : DEFAULT_CRON_FORM.payloadKind,
+    payloadLocked,
+    payloadText:
+      payload?.kind === "systemEvent"
+        ? payload.text
+        : payload?.kind === "agentTurn"
+          ? payload.message
+          : payload?.kind === "command"
+            ? payload.argv.join(" ")
+            : "",
     payloadModel: payload?.kind === "agentTurn" ? (payload.model ?? "") : "",
     payloadThinking: payload?.kind === "agentTurn" ? (payload.thinking ?? "") : "",
     payloadLightContext: payload?.kind === "agentTurn" ? payload.lightContext === true : false,
@@ -513,7 +573,7 @@ function jobToForm(job: CronJob, prev: CronFormState): CronFormState {
     const parsed = parseEverySchedule(job.schedule.everyMs);
     next.everyAmount = parsed.everyAmount;
     next.everyUnit = parsed.everyUnit;
-  } else {
+  } else if (job.schedule.kind === "cron") {
     next.cronExpr = job.schedule.expr;
     next.cronTz = job.schedule.tz ?? "";
     const staggerFields = parseStaggerSchedule(job.schedule.staggerMs);
@@ -521,6 +581,8 @@ function jobToForm(job: CronJob, prev: CronFormState): CronFormState {
     next.staggerAmount = staggerFields.staggerAmount;
     next.staggerUnit = staggerFields.staggerUnit;
   }
+  // Other schedule kinds (e.g. on-exit) are shown read-only in the list and have no
+  // editable schedule form fields; leave the cron/at/every fields at their defaults.
 
   return normalizeCronFormState(next);
 }
@@ -576,8 +638,8 @@ function buildCronPayload(form: CronFormState) {
   const payload: {
     kind: "agentTurn";
     message: string;
-    model?: string;
-    thinking?: string;
+    model?: string | null;
+    thinking?: string | null;
     timeoutSeconds?: number;
     lightContext?: boolean;
   } = { kind: "agentTurn", message };
@@ -644,7 +706,8 @@ function buildFailureAlert(form: CronFormState, existingChannel?: string) {
   return patch;
 }
 
-export async function addCronJob(state: CronState) {
+export async function addCronJob(state: CronState): Promise<boolean> {
+  let saved = false;
   await withCronBusy(state, async (client) => {
     const form = normalizeCronFormState(state.cronForm);
     if (form !== state.cronForm) {
@@ -656,20 +719,38 @@ export async function addCronJob(state: CronState) {
       return;
     }
 
-    const schedule = buildCronSchedule(form);
-    const payload = buildCronPayload(form);
     const editingJob = state.cronEditingJobId
       ? state.cronJobs.find((job) => job.id === state.cronEditingJobId)
       : undefined;
     const editingPayload = editingJob ? getCronJobPayload(editingJob) : null;
-    if (payload.kind === "agentTurn") {
-      const existingLightContext =
-        editingPayload?.kind === "agentTurn" ? editingPayload.lightContext : undefined;
-      if (
-        !form.payloadLightContext &&
-        state.cronEditingJobId &&
-        existingLightContext !== undefined
-      ) {
+    // Preserve on-exit only while the edit form still points at on-exit; if the
+    // user selects an editable schedule kind, the update must apply it.
+    const preserveSchedule = Boolean(
+      state.cronEditingJobId &&
+      (editingJob?.schedule as { kind?: string } | undefined)?.kind === "on-exit" &&
+      form.scheduleKind === "on-exit",
+    );
+    const schedule = preserveSchedule ? undefined : buildCronSchedule(form);
+    const preserveLockedPayload = Boolean(
+      state.cronEditingJobId && form.payloadLocked && editingPayload?.kind === "command",
+    );
+    const payload = preserveLockedPayload ? undefined : buildCronPayload(form);
+    if (
+      payload?.kind === "agentTurn" &&
+      state.cronEditingJobId &&
+      editingPayload?.kind === "agentTurn"
+    ) {
+      // When editing, a blanked field that previously held a stored override must
+      // send an explicit clear; an omitted key means "leave unchanged" on merge.
+      // The form only shows stored overrides (not inherited defaults), so a blank
+      // input with a stored value is an intentional clear.
+      if (!form.payloadModel.trim() && editingPayload.model !== undefined) {
+        payload.model = null;
+      }
+      if (!form.payloadThinking.trim() && editingPayload.thinking !== undefined) {
+        payload.thinking = null;
+      }
+      if (!form.payloadLightContext && editingPayload.lightContext !== undefined) {
         payload.lightContext = false;
       }
     }
@@ -701,20 +782,24 @@ export async function addCronJob(state: CronState) {
     const agentId = form.clearAgent ? null : form.agentId.trim();
     const sessionKeyRaw = form.sessionKey.trim();
     const sessionKey = sessionKeyRaw || (editingJob?.sessionKey ? null : undefined);
-    const job = {
+    const job: Record<string, unknown> = {
       name: form.name.trim(),
       description: form.description.trim(),
       agentId: agentId === null ? null : agentId || undefined,
       sessionKey,
       enabled: form.enabled,
       deleteAfterRun: form.deleteAfterRun,
-      schedule,
       sessionTarget: form.sessionTarget,
       wakeMode: form.wakeMode,
-      payload,
       delivery,
       failureAlert,
     };
+    if (schedule) {
+      job.schedule = schedule;
+    }
+    if (payload) {
+      job.payload = payload;
+    }
     if (!job.name) {
       throw new Error(t("cron.errors.nameRequiredShort"));
     }
@@ -728,15 +813,17 @@ export async function addCronJob(state: CronState) {
       await client.request("cron.add", job);
       resetCronFormToDefaults(state);
     }
-    await loadCronJobsPage(state);
+    await loadCronJobsPage(state, { tableFilters: true });
     await loadCronStatus(state);
+    saved = true;
   });
+  return saved;
 }
 
 export async function toggleCronJob(state: CronState, job: CronJob, enabled: boolean) {
   await withCronBusy(state, async (client) => {
     await client.request("cron.update", { id: job.id, patch: { enabled } });
-    await loadCronJobsPage(state);
+    await loadCronJobsPage(state, { tableFilters: true });
     await loadCronStatus(state);
   });
 }
@@ -758,7 +845,7 @@ export async function removeCronJob(state: CronState, job: CronJob) {
       state.cronRunsJobId = null;
       clearCronRunsPage(state);
     }
-    await loadCronJobsPage(state);
+    await loadCronJobsPage(state, { tableFilters: true });
     await loadCronStatus(state);
   });
 }
@@ -900,6 +987,11 @@ export function startCronClone(state: CronState, job: CronJob) {
   );
   const cloned = jobToForm(job, state.cronForm);
   cloned.name = buildCloneName(job.name, existingNames);
+  if (cloned.payloadLocked) {
+    cloned.payloadLocked = false;
+    cloned.payloadKind = DEFAULT_CRON_FORM.payloadKind;
+    cloned.payloadText = "";
+  }
   state.cronForm = cloned;
   state.cronFieldErrors = validateCronForm(state.cronForm);
 }
